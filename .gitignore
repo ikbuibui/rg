@@ -1,0 +1,67 @@
+
+# CMake
+Makefile
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+compile_commands.json
+DartConfiguration.tcl
+Testing
+
+build/
+.build/
+.cache/
+
+*.swp
+*.png
+*.dot
+
+# tmp files
+*~
+
+# netbeans project files
+/nbproject/
+
+# Code::Blocks project files
+/*.cbp
+/*.layout
+
+# Visual Studio Code configuration files
+.vscode
+
+# JetBrains project files and tmp's
+.idea/
+/venv/
+
+# Clang tidy
+.clang-tidy
+
+# python byte code
+*.pyc
+
+# original backup files
+*.orig
+
+# doxygen output
+docs/xml/
+docs/doxyxml
+docs/doxygen_sqlite3.db
+docs/html/
+# sphinx & breathe output
+docs/build/
+
+### macOS ###
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Visual Studio configuration and output files
+out
+/.vs
+
+# zed configuration file
+/.zed
