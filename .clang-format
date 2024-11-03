@@ -137,17 +137,17 @@ IncludeCategories:
   # Local headers (in "") above all else
   - Regex: '"([A-Za-z0-9.\/-_])+"'
     Priority: 1
-  # "redGrapes/foo.hpp" after local headers (occur inside redGrapes)
-  - Regex: '"redGrapes/([A-Za-z0-9.\/-_])+"'
+  # "src/foo.hpp" after local headers (occur inside src)
+  - Regex: '"src/([A-Za-z0-9.\/-_])+"'
     Priority: 2
-  # <redGrapes/foo.hpp> after local headers (occur outside redGrapes in examples and test)
-  - Regex: '<redGrapes/([A-Za-z0-9.\/-_])+>'
+  # <src/foo.hpp> after local headers (occur outside src in examples and test)
+  - Regex: '<src/([A-Za-z0-9.\/-_])+>'
     Priority: 3
   # C++ standard library headers are the last group to be included
   - Regex: '<([A-Za-z0-9\/-_])+>'
     Priority: 5
   # Includes that made it this far are third-party headers and will be placed
-  # below redGrapes's includes
+  # below src's includes
   - Regex: '<([A-Za-z0-9.\/-_])+>'
     Priority: 4
 # Macros: []
