@@ -39,8 +39,6 @@ TEST_CASE("Init and Finalize", "[hello]")
     std::cout << "Position 0" << std::endl;
     auto init = rg::init(6);
     std::cout << "Position A" << std::endl;
-    rg::finalize(init.get());
-    std::cout << "Position B" << std::endl;
     return;
 }
 

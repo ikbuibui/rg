@@ -8,7 +8,7 @@
 
 namespace rg
 {
-    // awaiter to place its own continuation to the pool stack
+    // awaiter to place its own continuation to the pool stack and return to caller
     template<typename promise_type>
     struct DetachToPoolAwaiter
     {
@@ -18,14 +18,12 @@ namespace rg
             return false;
         };
 
-        std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> h) noexcept
+        void await_suspend(std::coroutine_handle<promise_type> h) noexcept
         {
             // add me to stack
-            // and suspend. Resumes finalize coroutine
-            //  suspend with cv
-            // wake and resume with finalize coroutine handle obtained from the pool
-            std::cout << "handle to main cont emplaced" << std::endl;
-            return h.promise().pool_p->emplace_init_frame(h);
+            // and return to main
+            std::cout << "handle to coro cont emplaced" << std::endl;
+            h.promise().pool_p->emplace_init_frame(h);
         };
 
         void await_resume() noexcept {};
@@ -34,7 +32,7 @@ namespace rg
     // parser coroutine return type
 
     // returns the value of the callable
-    // I want to suspend_always initial_suspend it and then put its handle to the handle stack
+    // I want to the awaiter of initial_suspend to put its handle to the handle stack
     // handle stack will be eaten by the pool
     // Holds the pool
     struct InitTask
@@ -53,12 +51,14 @@ namespace rg
                 return InitTask{std::coroutine_handle<promise_type>::from_promise(*this), size};
             }
 
-            std::suspend_never initial_suspend() noexcept
+            DetachToPoolAwaiter<promise_type> initial_suspend() noexcept
             {
+                std::cout << "initial suspend called" << std::endl;
+
                 return {};
             }
 
-            DetachToPoolAwaiter<promise_type> final_suspend() noexcept
+            std::suspend_always final_suspend() noexcept
             {
                 std::cout << "final suspend called" << std::endl;
                 return {};
@@ -78,6 +78,11 @@ namespace rg
         {
             h.promise().pool_p = &pool;
             std::cout << "init return object created" << std::endl;
+        }
+
+        ~InitTask()
+        {
+            std::cout << "destroy rh" << std::endl;
         }
 
         std::coroutine_handle<promise_type> coro;
