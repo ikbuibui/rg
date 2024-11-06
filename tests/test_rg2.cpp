@@ -1,15 +1,73 @@
 // tests/test_rg2.cpp
 #define CATCH_CONFIG_MAIN
-#include "finalizeTask.hpp"
+#include "ThreadPool.hpp"
+#include "dispatchTask.hpp"
+#include "init.hpp"
 #include "initTask.hpp"
 #include "resources.hpp"
-#include "rg2.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <iostream>
 #include <thread>
+
+// hijack main and return its value from init
+// be explicit about type in exposed interface and auto deduce generically inside
+template<typename T>
+auto orchestrate(rg::ThreadPool* ptr) -> rg::InitTask<T>
+{
+    std::cout << "init coro started running" << std::endl;
+
+    auto a = co_await rg::dispatch_task(
+        []() -> rg::Task<T>
+        {
+            std::cout << "dispatched task starts executing" << std::endl;
+
+            auto b = co_await rg::dispatch_task(
+                []() -> rg::Task<T>
+                {
+                    std::cout << "child 1 starts executing" << std::endl;
+                    co_return 1;
+                });
+
+            co_return 1;
+        });
+
+    auto c = co_await rg::dispatch_task(
+        []() -> rg::Task<T>
+        {
+            std::cout << "child 2 starts executing" << std::endl;
+            auto b = co_await rg::dispatch_task(
+                []() -> rg::Task<T>
+                {
+                    auto b = co_await rg::dispatch_task(
+                        []() -> rg::Task<T>
+                        {
+                            std::cout << "child 2.1 starts executing" << std::endl;
+                            auto b = co_await rg::dispatch_task(
+                                []() -> rg::Task<T>
+                                {
+                                    std::cout << "child 2.1.1 starts executing" << std::endl;
+                                    co_return 1;
+                                });
+
+                            co_return 1;
+                        });
+
+                    std::cout << "child 2.2 starts executing" << std::endl;
+                    co_return 1;
+                });
+
+            co_return 1;
+        });
+
+    // std::this_thread::sleep_for(std::chrono::seconds(4));
+
+    std::cout << "init coro running through" << std::endl;
+
+    co_return 1;
+}
 
 // TEST_CASE("Hello function works", "[hello]")
 // {
@@ -37,8 +95,10 @@
 TEST_CASE("Init and Finalize", "[hello]")
 {
     std::cout << "Position 0" << std::endl;
-    auto init = rg::init(6);
-    std::cout << "Position A" << std::endl;
+    auto poolObj = rg::init(6);
+    std::cout << "Position 1" << std::endl;
+    auto orc = orchestrate<int>(poolObj.pool_ptr());
+    std::cout << "Position 2" << std::endl;
     return;
 }
 
