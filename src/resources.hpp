@@ -1,6 +1,5 @@
 #pragma once
 
-#include <concepts>
 #include <cstdint>
 #include <functional>
 #include <type_traits>
@@ -34,6 +33,7 @@ namespace rg
     template<typename T, uint32_t ResourceID, typename AccessMode>
     struct ResourceHandle
     {
+        using value_type = T;
         using access_type = typename AccessMode::access_type;
         static constexpr uint32_t resource_id = ResourceID;
 
@@ -57,6 +57,8 @@ namespace rg
     concept IsResourceHandle = requires {
         // Must have a static constexpr variable `resource_id`
         T::resource_id;
+        // Must have a nested `value_type` type
+        typename T::value_type;
         // Must have a nested `access_type` type
         typename T::access_type;
         // must have obj which is the type which is bound to the callable

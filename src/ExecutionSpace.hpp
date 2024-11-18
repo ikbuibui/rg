@@ -2,8 +2,6 @@
 
 #include "ResourceNode.hpp"
 #include "ThreadPool.hpp"
-#include "dispatchTask.hpp"
-#include "resources.hpp"
 
 #include <coroutine>
 #include <cstdint>
@@ -21,20 +19,18 @@ namespace rg
     // else use a shared ptr to a task space in the task and pass this shared pointer around
     struct ExecutionSpace
     {
-        std::list<ResourceNode> resList{}; // list to hold resources accesses of children
-        ThreadPool* pool_p{};
-        // std::list<std::list<RA::mode>> resList{};
-
+        // list to hold resources accesses of children
         // list of resources it is registed in the parent (dont need access mode, only UID i think)
-
-        bool deregisterOnDone = false;
-        bool destroyOnDone = false;
-
+        std::list<ResourceNode> resList{};
         // coroutine handle or parent space ptrcan be used to signal deregistration required
         std::coroutine_handle<> ownerHandle = nullptr;
         ExecutionSpace* parentSpace = nullptr;
 
+        ThreadPool* pool_p{};
         std::mutex mtx;
+
+        bool deregisterOnDone = false;
+        bool destroyOnDone = false;
 
         // checks if resList holding children is empty
         bool done()

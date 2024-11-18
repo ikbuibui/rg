@@ -31,6 +31,7 @@ namespace rg
         std::coroutine_handle<> finalize_handle;
         std::condition_variable cv;
         std::mutex mtx;
+        std::stop_source stop_source;
 
     public:
         explicit ThreadPool(std::unsigned_integral auto size)
@@ -40,7 +41,7 @@ namespace rg
             std::generate_n(
                 std::back_inserter(threads),
                 size,
-                [this, &i] { return std::jthread(&ThreadPool::worker, this, i++); });
+                [this, &i] { return std::jthread(&ThreadPool::worker, this, i++, stop_source.get_token()); });
         }
 
         ~ThreadPool()
@@ -49,6 +50,8 @@ namespace rg
             {
             }
             std::cout << "TP destructor called" << std::endl;
+            stop_source.request_stop();
+
             // threads.clear();
             // std::this_thread::sleep_for(std::chrono::seconds(3));
             // std::lock_guard<std::mutex> lock(mtx);
@@ -103,7 +106,7 @@ namespace rg
             return worker_states.load(std::memory_order_acquire) == 0 && stack.empty() && readyQueue.empty();
         }
 
-        void worker(uint16_t index)
+        void worker(uint16_t index, std::stop_token stoken)
         {
             // TODO FIX WORKER. Currently they go to sleep after init if tasks take time to be emplaced
             uint64_t mask = (1ULL << index);
@@ -133,6 +136,11 @@ namespace rg
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend
                     worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                }
+                if(stoken.stop_requested())
+                {
+                    std::cout << "worker is requested to stop";
+                    return;
                 }
             }
             // std::this_thread::yield();

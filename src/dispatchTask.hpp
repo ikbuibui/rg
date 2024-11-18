@@ -94,9 +94,9 @@ namespace rg
 
         bool resourcesReady = false;
         // takes ownership of the handle, and passes it on in await resume
-        THandle taskHandleObj;
+        THandle handle;
 
-        DispatchAwaiter(THandle&& handle, ResourceHandles&&...) : taskHandleObj{std::forward<THandle>(handle)}
+        DispatchAwaiter(THandle&& handleObj, ResourceHandles&&...) : handle{std::forward<THandle>(handleObj)}
         {
         }
 
@@ -118,7 +118,7 @@ namespace rg
             h.promise().pool_p->dispatch_task(h);
 
             // execute the coroutine
-            return taskHandleObj.coro;
+            return handle.coro;
         }
 
         // passes the return object
@@ -126,7 +126,7 @@ namespace rg
         auto await_resume() const noexcept
         {
             // return value
-            return taskHandleObj;
+            return handle;
         }
     };
 
@@ -345,7 +345,7 @@ namespace rg
 
                 // Register handle to all resources in the execution space
                 auto wc = space.addDependencies(coro, awaiter);
-                coro.promise().waitCounter = wc;
+                // coro.promise().waitCounter = wc;
                 std::cout << "value set in wait counter is " << wc << std::endl;
                 // resources Ready based on reutrn value of register to resources or value of waitCounter
                 bool resourcesReady = (wc == 0);
@@ -440,7 +440,9 @@ namespace rg
 
 
         // create the awaitabletask coroutine.
-        auto handle = std::invoke(std::forward<Callable>(callable), std::forward<ResourceHandles>(handles.obj)...);
+        auto handle = std::invoke(
+            std::forward<Callable>(callable),
+            std::forward<typename ResourceHandles::value_type>(handles.obj)...);
 
         // auto bound_callable = std::bind_front(std::forward<Callable>(callable), handles.obj...);
 
@@ -465,7 +467,7 @@ namespace rg
         // final_suspend removes from task and notifies
         // return DispatchAwaiter{handle};
         //
-        return DispatchAwaiter{handle, std::forward<ResourceHandles>(handles)...};
+        return DispatchAwaiter{std::move(handle), std::forward<ResourceHandles>(handles)...};
     }
 
     // TODO Dispatch for

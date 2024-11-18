@@ -97,25 +97,25 @@ namespace rg
             }
 
             // TODO contrain args to resource concept
-            template<typename Callable, typename... Args>
-            auto await_transform(DeferredCallable<Callable, Args...> dc)
+            template<typename TDispatchAwaiter>
+            auto await_transform(TDispatchAwaiter awaiter)
             {
-                // create the task coroutine.
-                auto handle = dc();
+                // Init
+                auto coro = awaiter.handle.coro;
+                // pass in the parent task space
+                coro.promise().parentSpace_p = &rootSpace;
+                // pass in the pool ptr
+                coro.promise().pool_p = pool_p;
+
+                coro.promise().space.pool_p = pool_p;
+                // Init over
 
                 // TODO can i merge this with init
-                // init
-                // pass in the parent task space
-                handle.coro.promise().parentSpace_p = &rootSpace;
-                // pass in the pool ptr
-                handle.coro.promise().pool_p = pool_p;
-                // Init over
-                handle.coro.promise().space.pool_p = pool_p;
                 rootSpace.pool_p = pool_p;
 
                 // Register handle to all resources in the execution space
-                auto wc = rootSpace.addDependencies(handle.coro, dc);
-                handle.coro.promise().waitCounter = wc;
+                auto wc = rootSpace.addDependencies(coro, awaiter);
+                // coro.promise().waitCounter = wc;
                 std::cout << "value set in wait counter is " << wc << std::endl;
                 // resources Ready based on reutrn value of register to resources or value of waitCounter
                 bool resourcesReady = (wc == 0);
@@ -125,8 +125,8 @@ namespace rg
                 // elseif resources not ready
                 //   task has been initialized with wait counter, waits for child notification to add to ready queue
                 //   return awaiter that suspend never (executes the continuation)
-
-                return DispatchAwaiter{resourcesReady, std::move(handle)};
+                awaiter.resourcesReady = resourcesReady;
+                return awaiter;
             }
 
             template<typename U, typename AwaitedPromise>
