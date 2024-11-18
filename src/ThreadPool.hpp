@@ -27,6 +27,7 @@ namespace rg
         // bitfield where 0 is free and 1 is busy
         std::atomic<uint64_t> worker_states{0};
         stack_type stack{};
+        stack_type readyQueue{};
         std::coroutine_handle<> finalize_handle;
         std::condition_variable cv;
         std::mutex mtx;
@@ -53,6 +54,12 @@ namespace rg
             // std::lock_guard<std::mutex> lock(mtx);
             // there should only be one waiting
             // cv.notify_one();
+        }
+
+        void addReadyTask(std::coroutine_handle<> h)
+        {
+            std::cout << "pushing to ready tasks" << std::endl;
+            readyQueue.bounded_push(h);
         }
 
         // returns the return of the callable of the coroutine
@@ -93,7 +100,7 @@ namespace rg
         {
             // TODO
             // if workers are free and coro stack is empty
-            return worker_states.load(std::memory_order_acquire) == 0 && stack.empty();
+            return worker_states.load(std::memory_order_acquire) == 0 && stack.empty() && readyQueue.empty();
         }
 
         void worker(uint16_t index)
@@ -102,13 +109,25 @@ namespace rg
             uint64_t mask = (1ULL << index);
             std::cout << "worker started on index " << index << " thread id " << std::this_thread::get_id()
                       << std::endl;
-            while(!done())
+            // while(!done())
+            while(true)
             {
+                // seperate this popping order into a function
                 std::coroutine_handle<> h;
+                if(readyQueue.pop(h))
+                {
+                    std::cout << "ready queue popped " << std::this_thread::get_id() << std::endl;
+
+                    worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                    h.resume();
+                    // destruction of h is dealt with final suspend type or in get if something is returend
+                    worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                    continue;
+                }
                 // TODO think about and fix race condition here. Pop happens but not marked busy
                 if(stack.pop(h))
                 {
-                    std::cout << "stack popped " << std::this_thread::get_id() << std::endl;
+                    std::cout << "cont stack popped " << std::this_thread::get_id() << std::endl;
 
                     worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
