@@ -114,7 +114,6 @@ namespace rg
             // assert(resourcesReady);
             // emplace continuation to stack
             // TODO make sure the promise of the continuation can access the return type of
-            std::cout << "push continuation onto stack" << std::endl;
             h.promise().pool_p->dispatch_task(h);
 
             // execute the coroutine
@@ -346,7 +345,6 @@ namespace rg
                 // Register handle to all resources in the execution space
                 auto wc = space.addDependencies(coro, awaiter);
                 // coro.promise().waitCounter = wc;
-                std::cout << "value set in wait counter is " << wc << std::endl;
                 // resources Ready based on reutrn value of register to resources or value of waitCounter
                 bool resourcesReady = (wc == 0);
 

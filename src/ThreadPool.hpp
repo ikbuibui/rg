@@ -49,7 +49,6 @@ namespace rg
             while(!done())
             {
             }
-            std::cout << "TP destructor called" << std::endl;
             stop_source.request_stop();
 
             // threads.clear();
@@ -61,7 +60,6 @@ namespace rg
 
         void addReadyTask(std::coroutine_handle<> h)
         {
-            std::cout << "pushing to ready tasks" << std::endl;
             readyQueue.bounded_push(h);
         }
 
@@ -69,7 +67,6 @@ namespace rg
         void dispatch_task(std::coroutine_handle<> h)
         {
             stack.bounded_push(h);
-            std::cout << "push done" << std::endl;
         }
 
         // returns the return of the callable of the coroutine
@@ -78,7 +75,6 @@ namespace rg
             // lock to ensure the passed handle doesnt notify before cv wait is called wait till pool returns
             // std::unique_lock<std::mutex> lock(mtx);
             stack.bounded_push(h);
-            std::cout << "pushed onto the stack" << std::endl;
             // cv.wait(lock, done());
             // removing predicate till real check is implemented, trivial check is optimized out
             // dont go back to main until this is done
@@ -110,8 +106,6 @@ namespace rg
         {
             // TODO FIX WORKER. Currently they go to sleep after init if tasks take time to be emplaced
             uint64_t mask = (1ULL << index);
-            std::cout << "worker started on index " << index << " thread id " << std::this_thread::get_id()
-                      << std::endl;
             // while(!done())
             while(true)
             {
@@ -119,8 +113,6 @@ namespace rg
                 std::coroutine_handle<> h;
                 if(readyQueue.pop(h))
                 {
-                    std::cout << "ready queue popped " << std::this_thread::get_id() << std::endl;
-
                     worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend
@@ -130,8 +122,6 @@ namespace rg
                 // TODO think about and fix race condition here. Pop happens but not marked busy
                 if(stack.pop(h))
                 {
-                    std::cout << "cont stack popped " << std::this_thread::get_id() << std::endl;
-
                     worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend
@@ -139,7 +129,6 @@ namespace rg
                 }
                 if(stoken.stop_requested())
                 {
-                    std::cout << "worker is requested to stop";
                     return;
                 }
             }

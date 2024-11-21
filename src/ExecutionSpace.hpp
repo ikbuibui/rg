@@ -107,7 +107,6 @@ namespace rg
             TDeferredCallable::ResourceAccessList::for_each([this, &waitCount, h]<typename RA>()
                                                             { waitCount += addDependency(h, RA{}); });
 
-            std::cout << "wait Count " << waitCount << std::endl;
             return waitCount;
         }
 
@@ -117,17 +116,11 @@ namespace rg
         template<typename TCoroHandle, typename ResourceAccess>
         auto addDependency(TCoroHandle h, ResourceAccess const&)
         {
-            std::cout << "called add dependency" << std::endl;
             // Locate or create the ResourceNode
             auto resIt = std::find_if(
                 resList.begin(),
                 resList.end(),
-                [](ResourceNode& node)
-                {
-                    std::cout << "resource UID " << node.resource_uid << std::endl;
-
-                    return node.resource_uid == ResourceAccess::resource_id;
-                });
+                [](ResourceNode& node) { return node.resource_uid == ResourceAccess::resource_id; });
 
             // If not found, create a new ResourceNode with the given UID and add to the list
             if(resIt == resList.end())

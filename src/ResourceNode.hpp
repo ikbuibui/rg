@@ -119,8 +119,6 @@ namespace rg
                 ready = 0;
                 // there is a not ready task before us, so we cannot be ready. Add and wait
             }
-            std::cout << "Is task ready to execute " << ready << std::endl;
-
             return ready;
         }
 
@@ -202,18 +200,15 @@ namespace rg
                     {
                         // someone else is also blocking it
                         // dont set to ready
-                        std::cout << "Someone else blocks me" << std::endl;
                         break;
                     }
                     else
                     {
                         // no one else is blocking
                         // set to ready
-                        std::cout << "Check wait value : " << *(it->waitCounter_p) << std::endl;
 
                         if(--*(it->waitCounter_p) == 0)
                         {
-                            std::cout << "Notify to make ready. Val : " << *(it->waitCounter_p) << std::endl;
                             // move handle to ready tasks queue
                             pool_p->addReadyTask(it->handle);
                         }

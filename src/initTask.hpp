@@ -26,7 +26,6 @@ namespace rg
         {
             // add me to stack
             // and return to main
-            std::cout << "handle to coro cont emplaced" << std::endl;
             h.promise().pool_p->emplace_init_frame(h);
         };
 
@@ -116,7 +115,6 @@ namespace rg
                 // Register handle to all resources in the execution space
                 auto wc = rootSpace.addDependencies(coro, awaiter);
                 // coro.promise().waitCounter = wc;
-                std::cout << "value set in wait counter is " << wc << std::endl;
                 // resources Ready based on reutrn value of register to resources or value of waitCounter
                 bool resourcesReady = (wc == 0);
 
