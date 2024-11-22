@@ -7,9 +7,16 @@
 #include <cstdint>
 #include <list>
 #include <mutex>
+#include <tuple>
 
 namespace rg
 {
+
+    template<typename Func, typename... Args>
+    void callForEach(Func&& func, Args&&... args)
+    {
+        (func(std::forward<Args>(args)), ...); // Fold expression
+    }
 
     // I only need the taskspace for siblings.
     // Object to be held inside the promise object of the task
@@ -60,17 +67,19 @@ namespace rg
         template<typename TCoroHandle>
         void deregister(TCoroHandle handle)
         {
-            std::lock_guard lock(mtx);
-
-            auto it = resList.begin();
-            while(it != resList.end())
             {
-                auto temp = it;
-                bool nodeEmpty = it->remove_task(handle, pool_p);
-                ++it;
-                if(nodeEmpty)
+                std::lock_guard lock(mtx);
+
+                auto it = resList.begin();
+                while(it != resList.end())
                 {
-                    resList.erase(temp);
+                    auto temp = it;
+                    bool nodeEmpty = it->remove_task(handle, pool_p);
+                    ++it;
+                    if(nodeEmpty)
+                    {
+                        resList.erase(temp);
+                    }
                 }
             }
             // last task which is removed from the space will do this
@@ -81,7 +90,7 @@ namespace rg
             }
             if(destroyOnDone && done())
             {
-                ownerHandle.destroy();
+                // ownerHandle.destroy();
             }
         }
 
@@ -96,17 +105,18 @@ namespace rg
         // }
 
         // return number of notifications it needs to wait fort
-        template<typename TCoroHandle, typename TDeferredCallable>
-        auto addDependencies(TCoroHandle h, TDeferredCallable const&)
+        template<typename TCoroHandle, typename ResourceAccessTuple>
+        auto addDependencies(TCoroHandle h, ResourceAccessTuple const& accessTuple)
         {
             std::lock_guard lock(mtx);
 
             uint32_t waitCount = 0;
-
+            std::apply(
+                [h, this, &waitCount](auto&... access) { return ((waitCount += addDependency(h, access)), ...); },
+                accessTuple);
             // go over type list of resourceAccess in dc and for each resource accessm add dependency
-            TDeferredCallable::ResourceAccessList::for_each([this, &waitCount, h]<typename RA>()
-                                                            { waitCount += addDependency(h, RA{}); });
-
+            // ResourceAccess::ResourceAccessList::for_each([this, &waitCount, h]<typename RA>()
+            //                                              { waitCount += addDependency(h, RA{}); });
             return waitCount;
         }
 
@@ -114,23 +124,26 @@ namespace rg
     private:
         // Resource Access has a uid and
         template<typename TCoroHandle, typename ResourceAccess>
-        auto addDependency(TCoroHandle h, ResourceAccess const&)
+        auto addDependency(TCoroHandle h, ResourceAccess const& access)
         {
+            auto accessID = access.getID();
+            using AccessType = typename ResourceAccess::access_type;
+
             // Locate or create the ResourceNode
             auto resIt = std::find_if(
                 resList.begin(),
                 resList.end(),
-                [](ResourceNode& node) { return node.resource_uid == ResourceAccess::resource_id; });
+                [&accessID](ResourceNode const& node) { return node.resource_uid == accessID; });
 
             // If not found, create a new ResourceNode with the given UID and add to the list
             if(resIt == resList.end())
             {
-                resIt = resList.emplace(resList.end(), ResourceAccess::resource_id);
+                resIt = resList.emplace(resList.end(), accessID);
             }
 
             // Create a task_access for the coroutine handle and access mode
             // Add the task to the ResourceNode's queue and check readiness
-            bool isReady = resIt->add_task({h, typename ResourceAccess::access_type{}, &h.promise().waitCounter});
+            bool isReady = resIt->add_task({h, AccessType{}, &h.promise().waitCounter});
 
             // Return 1 if the task must wait for execution
             return !isReady;

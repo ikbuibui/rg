@@ -86,17 +86,20 @@ namespace rg
     //   already added handle to waiting task map/or set waiting atomic value, return awaiter that suspend never
     //   (executes the continuation)
     // TODO switch to IsResourceAccess
-    template<typename THandle, IsResourceHandle... ResourceHandles>
+    template<typename THandle, typename... ResourceAccess>
     struct DispatchAwaiter
     {
-        using ResourceAccessList
-            = TypeList<ResourceAccess<ResourceHandles::resource_id, typename ResourceHandles::access_type>...>;
-
+        // using ResourceAccessList
+        //     = TypeList<ResourceAccess<ResourceHandles::resource_id, typename ResourceHandles::access_type>...>;
+        std::tuple<ResourceAccess...> resources;
         bool resourcesReady = false;
         // takes ownership of the handle, and passes it on in await resume
         THandle handle;
 
-        DispatchAwaiter(THandle&& handleObj, ResourceHandles&&...) : handle{std::forward<THandle>(handleObj)}
+        DispatchAwaiter(THandle&& handleObj, ResourceAccess&&... resourcesAccess)
+            : handle{std::forward<THandle>(handleObj)}
+            , resources{std::forward<ResourceAccess>(resourcesAccess)...}
+
         {
         }
 
@@ -217,10 +220,6 @@ namespace rg
         return (counter == 0);
     }
 
-    struct base_task_promise
-    {
-    };
-
     // parser coroutine return type
     // returns the value of the callable
     // I want to suspend_always initial_suspend it and then put its handle to the handle stack
@@ -280,6 +279,7 @@ namespace rg
                 // if(children space is done)
                 if(space.done())
                 {
+                    std::cout << "space is done " << std::endl;
                     // deregister from parent
                     parentSpace_p->deregister(coro);
 
@@ -290,6 +290,8 @@ namespace rg
                 else
                 {
                     // set flag SpaceHasToDeregister
+                    std::cout << "space is not done " << std::endl;
+
                     space.deregisterOnDone = true;
                     space.parentSpace = parentSpace_p;
                     space.ownerHandle = coro;
@@ -343,7 +345,12 @@ namespace rg
                 // Init over
 
                 // Register handle to all resources in the execution space
-                auto wc = space.addDependencies(coro, awaiter);
+                auto wc = space.addDependencies(coro, awaiter.resources);
+
+                // TODO added to the resources, and now peopple will try to remove old stuff and run this.
+                // But I dont want to run this
+
+
                 // coro.promise().waitCounter = wc;
                 // resources Ready based on reutrn value of register to resources or value of waitCounter
                 bool resourcesReady = (wc == 0);
@@ -373,6 +380,8 @@ namespace rg
         {
             if(coro)
             {
+                std::lock_guard lock(coro.promise().mutex);
+
                 // get hasnt been called, and we reach the destructor
                 if(coro.done())
                 {
@@ -386,13 +395,15 @@ namespace rg
                     else
                     {
                         // destruction responsibilty is now with space
+                        std::cout << "Destructor sets destroy on done, space still working" << std::endl;
                         coro.promise().space.destroyOnDone = true;
                     }
                 }
                 else
                 {
                     // destruction responsibilty is now with space
-                    coro.promise().space.destroyOnDone = true;
+                    std::cout << "Destructor sets nothing, task still working" << std::endl;
+                    // coro.promise().space.destroyOnDone = true;
                 }
             }
             else
@@ -430,17 +441,16 @@ namespace rg
     // TODO pass the pool to the task
     // TODO pass in a way that i dont have to store stuff and make copies
     // Callable is a Task
-    template<typename Callable, IsResourceHandle... ResourceHandles>
-    auto dispatch_task(Callable&& callable, ResourceHandles&&... handles)
+    template<typename Callable, typename... ResourceAccess>
+    auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles)
     {
         // TODO bind resources with restrictions applied
         // TODO Think about copies, references and lifetimes
 
 
         // create the awaitabletask coroutine.
-        auto handle = std::invoke(
-            std::forward<Callable>(callable),
-            std::forward<typename ResourceHandles::value_type>(handles.obj)...);
+        auto handle = std::invoke(std::forward<Callable>(callable), accessHandles.get()...);
+        // , std::forward<typename ResourceAccess::value_type>(accessHandles.get())...);
 
         // auto bound_callable = std::bind_front(std::forward<Callable>(callable), handles.obj...);
 
@@ -465,7 +475,7 @@ namespace rg
         // final_suspend removes from task and notifies
         // return DispatchAwaiter{handle};
         //
-        return DispatchAwaiter{std::move(handle), std::forward<ResourceHandles>(handles)...};
+        return DispatchAwaiter{std::move(handle), std::forward<ResourceAccess>(accessHandles)...};
     }
 
     // TODO Dispatch for

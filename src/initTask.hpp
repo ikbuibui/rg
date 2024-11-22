@@ -60,7 +60,8 @@ namespace rg
 
             std::condition_variable cv;
 
-            promise_type(ThreadPool* ptr) : pool_p{ptr}
+            template<typename... Args>
+            promise_type(ThreadPool* ptr, Args...) : pool_p{ptr}
             {
             }
 
@@ -113,7 +114,7 @@ namespace rg
                 rootSpace.pool_p = pool_p;
 
                 // Register handle to all resources in the execution space
-                auto wc = rootSpace.addDependencies(coro, awaiter);
+                auto wc = rootSpace.addDependencies(coro, awaiter.resources);
                 // coro.promise().waitCounter = wc;
                 // resources Ready based on reutrn value of register to resources or value of waitCounter
                 bool resourcesReady = (wc == 0);

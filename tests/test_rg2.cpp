@@ -96,20 +96,20 @@ auto taskWithRes(rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
     int aData = 0;
     int bData = 0;
-    auto a = rg::makeIOResource<1>(aData);
-    auto b = rg::makeIOResource<2>(bData);
+    auto a = rg::Resource(aData);
+    auto b = rg::Resource(bData);
 
-    std::cout << "a, a_data: " << a.obj << " " << aData << std::endl;
+    std::cout << "a, a_data: " << a.get() << " " << aData << std::endl;
 
     auto a_handle = a.rg_read();
-    std::cout << "a handle read res id " << a_handle.resource_id << std::endl;
+    std::cout << "a handle read res id " << a_handle.getID() << std::endl;
     auto a_handle_w = a.rg_write();
-    std::cout << "a handle write res id " << a_handle_w.resource_id << std::endl;
+    std::cout << "a handle write res id " << a_handle_w.getID() << std::endl;
     auto b_handle = b.rg_read();
-    std::cout << "b handle res id " << b_handle.resource_id << std::endl;
+    std::cout << "b handle res id " << b_handle.getID() << std::endl;
 
     co_await rg::dispatch_task(
-        [](auto a) -> rg::Task<int>
+        [](auto& a) -> rg::Task<int>
         {
             std::cout << "Write to A" << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -119,19 +119,19 @@ auto taskWithRes(rg::ThreadPool* ptr) -> rg::InitTask<int>
         },
         a.rg_write());
     co_await rg::dispatch_task(
-        [](auto a) -> rg::Task<int>
+        [](auto& a) -> rg::Task<int>
         {
             std::cout << "Read A: " << a << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            // std::this_thread::sleep_for(std::chrono::seconds(1));
             co_return 0;
         },
         a.rg_read());
 
     co_await rg::dispatch_task(
-        [](auto b) -> rg::Task<int>
+        [](auto& b) -> rg::Task<int>
         {
             std::cout << "Write to B" << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(3));
+            // std::this_thread::sleep_for(std::chrono::seconds(3));
             b = 7;
             std::cout << "Write B done" << std::endl;
             co_return 0;
@@ -139,10 +139,10 @@ auto taskWithRes(rg::ThreadPool* ptr) -> rg::InitTask<int>
         b.rg_write());
 
     co_await rg::dispatch_task(
-        [](auto a, auto b) -> rg::Task<int>
+        [](auto& a, auto& b) -> rg::Task<int>
         {
             std::cout << "Read A & B: " << a << ", " << b << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            // std::this_thread::sleep_for(std::chrono::seconds(1));
             co_return 0;
         },
         a.rg_read(),
@@ -160,17 +160,17 @@ TEST_CASE("Tasks with resources")
 
 TEST_CASE("Access type combinations")
 {
-    rg::ResourceHandle<int*, 1, rg::access::read> readAccess(nullptr);
-    rg::ResourceHandle<int*, 2, rg::access::write> writeAccess(nullptr);
-    rg::ResourceAccess<3, rg::access::aadd> aaddAccess;
-    rg::ResourceAccess<4, rg::access::amul> amulAccess;
+    auto readAccess = typename rg::access::read{};
+    auto writeAccess = typename rg::access::write{};
+    auto amulAccess = typename rg::access::aadd{};
+    auto aaddAccess = typename rg::access::amul{};
 
-    REQUIRE(is_serial_access(readAccess, readAccess) == false); // read & read
-    REQUIRE(is_serial_access(aaddAccess, amulAccess) == true); // aadd & amul
-    REQUIRE(is_serial_access(writeAccess, readAccess) == true); // write & read
-    REQUIRE(is_serial_access(aaddAccess, aaddAccess) == false); // aadd & aadd
-    REQUIRE(is_serial_access(amulAccess, amulAccess) == false); // amul & amul
-    REQUIRE(is_serial_access(writeAccess, writeAccess) == true); // write & write
+    REQUIRE(rg::is_serial_access(readAccess, readAccess) == false);
+    REQUIRE(rg::is_serial_access(aaddAccess, amulAccess) == true);
+    REQUIRE(rg::is_serial_access(writeAccess, readAccess) == true);
+    REQUIRE(rg::is_serial_access(aaddAccess, aaddAccess) == false);
+    REQUIRE(rg::is_serial_access(amulAccess, amulAccess) == false);
+    REQUIRE(rg::is_serial_access(writeAccess, writeAccess) == true);
 }
 
 // TEST_CASE("Hello function works", "[hello]")
