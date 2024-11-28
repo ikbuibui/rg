@@ -3,9 +3,11 @@
 #include "ResourceNode.hpp"
 #include "ThreadPool.hpp"
 
+#include <condition_variable>
 #include <coroutine>
 #include <cstdint>
 #include <list>
+#include <memory>
 #include <mutex>
 #include <tuple>
 
@@ -31,13 +33,14 @@ namespace rg
         std::list<ResourceNode> resList{};
         // coroutine handle or parent space ptrcan be used to signal deregistration required
         std::coroutine_handle<> ownerHandle = nullptr;
-        ExecutionSpace* parentSpace = nullptr;
+
+        // assuming this only stays nullptr for the root space.
+        // Make sure this is initialized in my 2 step init in await_transform
+        std::shared_ptr<ExecutionSpace> parentSpace = nullptr;
 
         ThreadPool* pool_p{};
         std::mutex mtx;
-
-        bool deregisterOnDone = false;
-        bool destroyOnDone = false;
+        std::condition_variable cv;
 
         // checks if resList holding children is empty
         bool done()
@@ -54,6 +57,22 @@ namespace rg
         // only called when resList is empty
         ~ExecutionSpace()
         {
+            std::cout << "destroy space" << std::endl;
+            if(parentSpace)
+            {
+                std::cout << "dereg" << std::endl;
+                parentSpace->deregister(ownerHandle);
+            }
+            else
+            {
+                std::lock_guard lock(mtx);
+                cv.notify_all();
+                std::cout << "finlaize" << std::endl;
+                // currently this is stoipping the workers. Not necessary. We might want to have 2 initTasks
+                // what this really needs to do is finalize the init task
+                pool_p->finalize();
+                // notify finalize of init task
+            }
             // deregister from resources in parent space
 
             // destroy task which holds this space
@@ -84,14 +103,10 @@ namespace rg
             }
             // last task which is removed from the space will do this
             // space is done. do conditional deregister and destroy
-            if(deregisterOnDone && done())
-            {
-                parentSpace->deregister(ownerHandle);
-            }
-            if(destroyOnDone && done())
-            {
-                // ownerHandle.destroy();
-            }
+            // if(deregisterOnDone && done())
+            // {
+            //     parentSpace->deregister(ownerHandle);
+            // }
         }
 
         // Can be done with forwarding Args as well.
@@ -143,7 +158,7 @@ namespace rg
 
             // Create a task_access for the coroutine handle and access mode
             // Add the task to the ResourceNode's queue and check readiness
-            bool isReady = resIt->add_task({h, AccessType{}, &h.promise().waitCounter});
+            bool isReady = resIt->add_task({h.getHandle(), AccessType{}, &h.promise().waitCounter});
 
             // Return 1 if the task must wait for execution
             return !isReady;
