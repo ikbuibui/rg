@@ -15,7 +15,7 @@
 // hijack main and return its value from init
 // be explicit about type in exposed interface and auto deduce generically inside
 template<typename T>
-auto orchestrate(rg::ThreadPool* ptr) -> rg::InitTask<T>
+auto orchestrate([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<T>
 {
     std::cout << "init coro started running" << std::endl;
 
@@ -127,26 +127,26 @@ auto taskWithRes(rg::ThreadPool* ptr) -> rg::InitTask<int>
         },
         a.rg_read());
 
-    co_await rg::dispatch_task(
-        [](auto& b) -> rg::Task<int>
-        {
-            std::cout << "Write to B" << std::endl;
-            // std::this_thread::sleep_for(std::chrono::seconds(3));
-            b = 7;
-            std::cout << "Write B done" << std::endl;
-            co_return 0;
-        },
-        b.rg_write());
+    // co_await rg::dispatch_task(
+    //     [](auto& b) -> rg::Task<int>
+    //     {
+    //         std::cout << "Write to B" << std::endl;
+    //         // std::this_thread::sleep_for(std::chrono::seconds(3));
+    //         b = 7;
+    //         std::cout << "Write B done" << std::endl;
+    //         co_return 0;
+    //     },
+    //     b.rg_write());
 
-    co_await rg::dispatch_task(
-        [](auto& a, auto& b) -> rg::Task<int>
-        {
-            std::cout << "Read A & B: " << a << ", " << b << std::endl;
-            // std::this_thread::sleep_for(std::chrono::seconds(1));
-            co_return 0;
-        },
-        a.rg_read(),
-        b.rg_read());
+    // co_await rg::dispatch_task(
+    //     [](auto& a, auto& b) -> rg::Task<int>
+    //     {
+    //         std::cout << "Read A & B: " << a << ", " << b << std::endl;
+    //         // std::this_thread::sleep_for(std::chrono::seconds(1));
+    //         co_return 0;
+    //     },
+    //     a.rg_read(),
+    //     b.rg_read());
     co_return 0;
 }
 
@@ -154,7 +154,8 @@ TEST_CASE("Tasks with resources")
 {
     auto poolObj = rg::init(6);
     auto orc = taskWithRes(poolObj.pool_ptr());
-    auto val = orc.get();
+    orc.finalize();
+    std::cout << "finalize done" << std::endl;
     return;
 }
 

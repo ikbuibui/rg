@@ -3,6 +3,7 @@
 #include "ThreadPool.hpp"
 #include "dispatchTask.hpp"
 
+#include <condition_variable>
 #include <coroutine>
 #include <iostream>
 #include <mutex>
@@ -53,21 +54,34 @@ namespace rg
             // someone else waits for the completion of this task.
             std::coroutine_handle<> getWaiterHandle = nullptr;
             // mutex to synchronize final suspend and .get() waiting which adds a dependency
+            // used for barrier
             std::mutex mtx;
+            // used for barrier
+            std::condition_variable cv;
+            bool task_done = false;
+
+            SharedCoroutineHandle self;
+
+            std::atomic<uint32_t> childCounter = 0;
+            std::atomic<uint32_t>* parentChildCounter;
+            // This is not required, but to have the sharedHandleDeleter consistent with DispatchTask I keep this empty
+            std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
 
             // Task space for the children of this task. Passed in its ptr during await transform
-            ExecutionSpace rootSpace{};
-
-            std::condition_variable cv;
+            // std::shared_ptr<ExecutionSpace> rootSpace = std::make_shared<ExecutionSpace>();
 
             template<typename... Args>
             promise_type(ThreadPool* ptr, Args...) : pool_p{ptr}
+                                                   , parentChildCounter{&ptr->childCounter}
             {
+                // TODO can i merge this with init
+                // rootSpace->pool_p = pool_p;
             }
 
             InitTask get_return_object()
             {
-                return InitTask{std::coroutine_handle<promise_type>::from_promise(*this)};
+                self = SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this));
+                return InitTask{self};
             }
 
             std::suspend_never initial_suspend() noexcept
@@ -75,13 +89,17 @@ namespace rg
                 return {};
             }
 
-            std::suspend_always final_suspend() noexcept
+            DeleteAwaiter final_suspend() noexcept
             {
+                std::cout << "final suspend called" << std::endl;
+                task_done = true;
+                // rootSpace.reset();
                 // notify thart work is finished here
                 // finalize
-                std::lock_guard<std::mutex> lock(mtx);
-                cv.notify_one();
-                return {};
+                std::lock_guard lock(mtx);
+                cv.notify_all();
+                // self.reset();
+                return {std::move(self)};
             }
 
             void unhandled_exception()
@@ -97,46 +115,62 @@ namespace rg
             }
 
             // TODO contrain args to resource concept
-            template<typename TDispatchAwaiter>
-            auto await_transform(TDispatchAwaiter awaiter)
+            template<typename U>
+            auto await_transform(DispatchAwaiter<U> awaiter)
             {
                 // Init
-                auto coro = awaiter.handle.coro;
+                auto& awaiter_promise
+                    = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
                 // pass in the parent task space
-                coro.promise().parentSpace_p = &rootSpace;
+                // coro.promise().space->parentSpace = rootSpace;
                 // pass in the pool ptr
-                coro.promise().pool_p = pool_p;
+                awaiter_promise.pool_p = pool_p;
 
-                coro.promise().space.pool_p = pool_p;
+                // coro.promise().space->pool_p = pool_p;
+                // coro.promise().space->ownerHandle = coro.getHandle();
+                awaiter_promise.parent = self;
+                awaiter_promise.parentChildCounter = &childCounter;
+                ++childCounter;
+
                 // Init over
-
-                // TODO can i merge this with init
-                rootSpace.pool_p = pool_p;
-
-                // Register handle to all resources in the execution space
-                auto wc = rootSpace.addDependencies(coro, awaiter.resources);
-                // coro.promise().waitCounter = wc;
-                // resources Ready based on reutrn value of register to resources or value of waitCounter
-                bool resourcesReady = (wc == 0);
 
                 // if(resourcesReady)
                 //   return awaiter that suspends, adds continuation to stack, and executes task
                 // elseif resources not ready
                 //   task has been initialized with wait counter, waits for child notification to add to ready queue
                 //   return awaiter that suspend never (executes the continuation)
-                awaiter.resourcesReady = resourcesReady;
                 return awaiter;
             }
 
-            template<typename U, typename AwaitedPromise>
-            auto await_transform(GetAwaiter<U, AwaitedPromise> aw)
+            template<typename NonDispatchAwaiter>
+            auto await_transform(NonDispatchAwaiter aw)
             {
                 return aw;
             }
         };
 
-        InitTask(std::coroutine_handle<promise_type> h) : coro{h}
+        InitTask(SharedCoroutineHandle const& h) : coro{h}
         {
+        }
+
+        auto finalize()
+        {
+            // wait for task end, wait for root space to finish
+            //
+            while(coro.promise<promise_type>().childCounter != 0)
+            {
+            }
+            // {
+            //     std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
+            //     coro.promise<promise_type>().cv.wait(
+            //         lock,
+            //         [this] { return coro.promise<promise_type>().childCounter == 0; });
+            // }
+            // {
+            //     std::unique_lock<std::mutex> lock(coro.promise().rootSpace->mtx);
+            //     // maybe better to set a done bool in the execution space rather that checking empty resList
+            //     coro.promise().rootSpace->cv.wait(lock, [this] { return coro.promise().rootSpace->done(); });
+            // }
         }
 
         std::optional<T> get()
@@ -145,17 +179,21 @@ namespace rg
             // coro.done() is check for spurious wakeups
             // can also spin on coro.done, may be easier
             // while(!coro.done){} return coro.promise().result;
-            std::unique_lock<std::mutex> lock(coro.promise().mtx);
-            coro.promise().cv.wait(lock, [this] { return coro.done(); });
-            // todo make this exception safe
-            auto result = coro.promise().result.value();
+            if(!coro.promise<promise_type>().task_done)
+            {
+                std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
+                coro.promise<promise_type>().cv.wait(lock, [this] { return coro.promise<promise_type>().task_done; });
+                // todo make this exception safe
+            }
+            auto result = coro.promise<promise_type>().result.value();
+
             // coro.destroy();
             // make sure coro isnt used again by the handle. Either destroyed or owned by the execution space
-            coro = nullptr;
+            // coro = nullptr;
             return result;
         }
 
-        std::coroutine_handle<promise_type> coro;
+        SharedCoroutineHandle coro;
     };
 
     // TODO also make initTask and orchestrate for void

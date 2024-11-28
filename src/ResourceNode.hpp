@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <forward_list>
 #include <iterator>
+#include <mutex>
 #include <variant>
 
 namespace rg
@@ -55,40 +56,43 @@ namespace rg
     // ResourceNode struct with firstNotReady and notify function
     struct ResourceNode
     {
+    private:
         uint32_t resource_uid; // Unique identifier for the resource
         std::forward_list<task_access> tasks{}; // List of task_access instances
+
         std::forward_list<task_access>::iterator firstNotReady; // Iterator to the first not-ready task
         std::forward_list<task_access>::iterator lastTask; // Iterator to the last task before end
 
+        std::mutex mtx;
+
+    public:
         // Constructor
         ResourceNode(uint32_t uid) : resource_uid(uid), firstNotReady(tasks.end()), lastTask(tasks.before_begin())
         {
         }
 
-        bool isSerial(typename task_access::AccessModes x, typename task_access::AccessModes y)
+        ~ResourceNode()
         {
-            return std::visit(
-                [](auto const& lhs, auto const& rhs)
-                {
-                    return is_serial_access(lhs, rhs); // Calls processAccess with the extracted types
-                },
-                x,
-                y);
+            std::cout << "node id : " << resource_uid << " destroyed" << std::endl;
+        }
+
+        auto getId() const
+        {
+            return resource_uid;
         }
 
         // Add a task to the list, incremenets wait counter of task if task is not immidiately ready to run
         // TODO think about rvalue reference
-        bool add_task(task_access&& task)
+        void add_task(task_access&& task)
         {
             // add task to resrource queue
             // TODO think about empalce
             // TODO think about locking and when to insert (maybe insert after checking for blocking).
-            // 2 threads cant add together
+            // 2 threads cant add together in this design
             // lastTask = tasks.insert_after(lastTask, task);
-            // // TODO add to wait counter here
-            bool ready = 0;
-
             // check ready
+            std::lock_guard lock(mtx);
+
             if(firstNotReady == tasks.end())
             {
                 // all previous tasks are ready
@@ -100,7 +104,6 @@ namespace rg
                     lastTask = tasks.insert_after(lastTask, task);
                     firstNotReady = lastTask;
                     ++*task.waitCounter_p;
-                    ready = 0;
                 }
                 else
                 {
@@ -108,7 +111,6 @@ namespace rg
                     lastTask = tasks.insert_after(lastTask, task);
                     // set to end all the time since end might change after adding a task
                     firstNotReady = tasks.end();
-                    ready = 1;
                 }
             }
             else
@@ -116,29 +118,33 @@ namespace rg
                 lastTask = tasks.insert_after(lastTask, task);
                 // firstNotReady stays the same
                 ++*task.waitCounter_p;
-                ready = 0;
                 // there is a not ready task before us, so we cannot be ready. Add and wait
             }
-            return ready;
         }
 
         // Removes all active tasks from the list which have a handle
         // Task is not guaranteed to be present in this ResourceNode, may not be registered here
         // returns bool : true if there are no more tasks in the list, signal to delete the node
-        template<typename TCoroHandle>
-        bool remove_task(TCoroHandle handle, ThreadPool* pool_p)
+        // doesnt need to be a templated type, type erased handle is enough
+        bool remove_task(std::coroutine_handle<> handle, ThreadPool* pool_p)
         {
             // TODO use erase if or find if?
             // Since task was run, is done, and is being removed, it must have been in the running tasks
             // Assuming only one of a handle is added
+            std::lock_guard lock(mtx);
             auto first = tasks.before_begin();
             auto next = std::next(first);
 
+            // This should always find and remove a task
             while(next != firstNotReady)
             {
                 // found handle here
                 if(next->handle == handle)
                 {
+                    if(next == lastTask)
+                    {
+                        lastTask = first;
+                    }
                     auto oldAccessMode = next->accessMode;
                     tasks.erase_after(first);
                     // erased after first.
@@ -154,10 +160,24 @@ namespace rg
             return tasks.empty();
         }
 
+        // TODO remove unused func
         // Check if the ResourceNode is empty
         bool empty() const
         {
             return tasks.empty(); // Returns true if the list is empty
+        }
+
+
+    private:
+        bool isSerial(typename task_access::AccessModes x, typename task_access::AccessModes y)
+        {
+            return std::visit(
+                [](auto const& lhs, auto const& rhs)
+                {
+                    return is_serial_access(lhs, rhs); // Calls processAccess with the extracted types
+                },
+                x,
+                y);
         }
 
         // TODO think about using const iterators
@@ -204,9 +224,9 @@ namespace rg
                     }
                     else
                     {
+                        std::cout << "decrement wait counter" << std::endl;
                         // no one else is blocking
                         // set to ready
-
                         if(--*(it->waitCounter_p) == 0)
                         {
                             // move handle to ready tasks queue

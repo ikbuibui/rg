@@ -1,4 +1,5 @@
 #include "ThreadPool.hpp"
+#include "barrier.hpp"
 #include "dispatchTask.hpp"
 #include "init.hpp"
 #include "initTask.hpp"
@@ -37,8 +38,8 @@ void hash(unsigned task_id, std::array<uint64_t, 8>& val)
 std::chrono::microseconds task_duration(2);
 unsigned n_resources = 16;
 unsigned n_tasks = 128;
-unsigned n_threads = 2;
-unsigned min_dependencies = 0;
+unsigned n_threads = 1;
+unsigned min_dependencies = 1;
 unsigned max_dependencies = 5;
 std::mt19937 gen;
 
@@ -96,123 +97,117 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
     rg::Resource<int> aRes = a;
     std::vector<rg::Resource<std::array<uint64_t, 8>>> resources(n_resources);
 
-    auto asdaf = co_await rg::dispatch_task(
-        [&resources](auto& ra1) -> rg::Task<int>
+    for(unsigned i = 0; i < n_tasks; ++i)
+        switch(access_pattern[i].size())
         {
-            for(unsigned i = 0; i < n_tasks; ++i)
-                switch(access_pattern[i].size())
-                {
-                case 0:
+        case 0:
+            {
+                auto asdaf1 = co_await rg::dispatch_task(
+                    []() -> rg::Task<int>
                     {
-                        auto asdaf1 = co_await rg::dispatch_task(
-                            []() -> rg::Task<int>
-                            {
-                                sleep(task_duration);
-                                co_return 0;
-                            });
-                        break;
-                    }
-                case 1:
+                        sleep(task_duration);
+                        co_return 0;
+                    });
+                break;
+            }
+        case 1:
+            {
+                auto asdaf2 = co_await rg::dispatch_task(
+                    [i](auto& ra1) -> rg::Task<int>
                     {
-                        auto asdaf2 = co_await rg::dispatch_task(
-                            [i](auto& ra1) -> rg::Task<int>
-                            {
-                                sleep(task_duration);
-                                hash(i, ra1);
-                                co_return 0;
-                            },
-                            resources[access_pattern[i][0]].rg_write());
-                        break;
-                    }
-                case 2:
+                        sleep(task_duration);
+                        hash(i, ra1);
+                        co_return 0;
+                    },
+                    resources[access_pattern[i][0]].rg_write());
+                break;
+            }
+        case 2:
+            {
+                auto asdaf3 = co_await rg::dispatch_task(
+                    [i](auto& ra1, auto& ra2) -> rg::Task<int>
                     {
-                        auto asdaf3 = co_await rg::dispatch_task(
-                            [i](auto& ra1, auto& ra2) -> rg::Task<int>
-                            {
-                                sleep(task_duration);
-                                hash(i, ra1);
-                                hash(i, ra2);
-                                co_return 0;
-                            },
-                            resources[access_pattern[i][0]].rg_write(),
-                            resources[access_pattern[i][1]].rg_write());
-                        break;
-                    }
-                case 3:
+                        sleep(task_duration);
+                        hash(i, ra1);
+                        hash(i, ra2);
+                        co_return 0;
+                    },
+                    resources[access_pattern[i][0]].rg_write(),
+                    resources[access_pattern[i][1]].rg_write());
+                break;
+            }
+        case 3:
+            {
+                auto asdaf4 = co_await rg::dispatch_task(
+                    [i](auto& ra1, auto& ra2, auto& ra3) -> rg::Task<int>
                     {
-                        auto asdaf4 = co_await rg::dispatch_task(
-                            [i](auto& ra1, auto& ra2, auto& ra3) -> rg::Task<int>
-                            {
-                                sleep(task_duration);
-                                hash(i, ra1);
-                                hash(i, ra2);
-                                hash(i, ra3);
-                                co_return 0;
-                            },
-                            resources[access_pattern[i][0]].rg_write(),
-                            resources[access_pattern[i][1]].rg_write(),
-                            resources[access_pattern[i][2]].rg_write());
-                        break;
-                    }
-                case 4:
+                        sleep(task_duration);
+                        hash(i, ra1);
+                        hash(i, ra2);
+                        hash(i, ra3);
+                        co_return 0;
+                    },
+                    resources[access_pattern[i][0]].rg_write(),
+                    resources[access_pattern[i][1]].rg_write(),
+                    resources[access_pattern[i][2]].rg_write());
+                break;
+            }
+        case 4:
+            {
+                auto asdaf5 = co_await rg::dispatch_task(
+                    [i](auto& ra1, auto& ra2, auto& ra3, auto& ra4) -> rg::Task<int>
                     {
-                        auto asdaf5 = co_await rg::dispatch_task(
-                            [i](auto& ra1, auto& ra2, auto& ra3, auto& ra4) -> rg::Task<int>
-                            {
-                                sleep(task_duration);
-                                hash(i, ra1);
-                                hash(i, ra2);
-                                hash(i, ra3);
-                                hash(i, ra4);
-                                co_return 0;
-                            },
-                            resources[access_pattern[i][0]].rg_write(),
-                            resources[access_pattern[i][1]].rg_write(),
-                            resources[access_pattern[i][2]].rg_write(),
-                            resources[access_pattern[i][3]].rg_write());
-                        break;
-                    }
-                case 5:
+                        sleep(task_duration);
+                        hash(i, ra1);
+                        hash(i, ra2);
+                        hash(i, ra3);
+                        hash(i, ra4);
+                        co_return 0;
+                    },
+                    resources[access_pattern[i][0]].rg_write(),
+                    resources[access_pattern[i][1]].rg_write(),
+                    resources[access_pattern[i][2]].rg_write(),
+                    resources[access_pattern[i][3]].rg_write());
+                break;
+            }
+        case 5:
+            {
+                auto asdaf6 = co_await rg::dispatch_task(
+                    [i](auto& ra1, auto& ra2, auto& ra3, auto& ra4, auto& ra5) -> rg::Task<int>
                     {
-                        auto asdaf6 = co_await rg::dispatch_task(
-                            [i](auto& ra1, auto& ra2, auto& ra3, auto& ra4, auto& ra5) -> rg::Task<int>
-                            {
-                                sleep(task_duration);
-                                hash(i, ra1);
-                                hash(i, ra2);
-                                hash(i, ra3);
-                                hash(i, ra4);
-                                hash(i, ra5);
-                                co_return 0;
-                            },
-                            resources[access_pattern[i][0]].rg_write(),
-                            resources[access_pattern[i][1]].rg_write(),
-                            resources[access_pattern[i][2]].rg_write(),
-                            resources[access_pattern[i][3]].rg_write(),
-                            resources[access_pattern[i][4]].rg_write());
-                        break;
-                    }
-                }
-            co_return 0;
-        },
-        aRes.rg_write());
+                        sleep(task_duration);
+                        hash(i, ra1);
+                        hash(i, ra2);
+                        hash(i, ra3);
+                        hash(i, ra4);
+                        hash(i, ra5);
+                        co_return 0;
+                    },
+                    resources[access_pattern[i][0]].rg_write(),
+                    resources[access_pattern[i][1]].rg_write(),
+                    resources[access_pattern[i][2]].rg_write(),
+                    resources[access_pattern[i][3]].rg_write(),
+                    resources[access_pattern[i][4]].rg_write());
+                break;
+            }
+        }
 
     std::cout << "tasks created" << std::endl;
 
-    // auto zero = co_await asdaf.get();
-    // synchronized with a fake resource rather than a barrier
-    co_await rg::dispatch_task(
-        [&resources](auto& ra1) -> rg::Task<int>
-        {
-            std::cout << "starting check" << std::endl;
+    std::cout << "starting check" << std::endl;
 
-            for(unsigned i = 0; i < n_resources; ++i)
+    for(unsigned i = 0; i < n_resources; ++i)
+    {
+        co_await rg::dispatch_task(
+            [&resources, i](auto& ra1) -> rg::Task<int>
+            {
                 REQUIRE(resources[i].get() == expected_hash[i]);
-            std::cout << " check done" << std::endl;
+                co_return 0;
+            },
+            resources[i].rg_read());
+    }
+    std::cout << " check done" << std::endl;
 
-            co_return 0;
-        },
-        aRes.rg_write());
     co_return 0;
 }
 
@@ -224,6 +219,7 @@ TEST_CASE("RandomGraph")
 
     auto poolObj = rg::init(n_threads);
     auto a = test(poolObj.pool_ptr());
-
+    a.finalize();
+    std::cout << "finalize done" << std::endl;
     return;
 }

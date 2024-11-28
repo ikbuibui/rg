@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -33,6 +34,9 @@ namespace rg
         };
 
     } // namespace access
+
+    // forward declaration to hold shared pointer
+    struct ResourceNode;
 
     // Global ID generator
     class GlobalIDGenerator
@@ -254,7 +258,12 @@ namespace rg
 
         uint32_t getID() const
         {
-            return resource.get().getID();
+            return resource.get().getUserQueue()->getId();
+        }
+
+        std::shared_ptr<ResourceNode> getUserQueue() const
+        {
+            return resource.get().getUserQueue();
         }
     };
 
@@ -264,7 +273,7 @@ namespace rg
     private:
         // Use std::variant to manage storage of value or reference
         std::variant<T, std::reference_wrapper<T>> storage;
-        uint32_t id = GlobalIDGenerator::generate_id();
+        std::shared_ptr<ResourceNode> userQueue = std::make_shared<ResourceNode>(GlobalIDGenerator::generate_id());
 
     public:
         // Constructor for lvalue (stores a reference)
@@ -284,9 +293,9 @@ namespace rg
             std::cout << "Default construct T" << std::endl;
         }
 
-        uint32_t getID() const
+        std::shared_ptr<ResourceNode> getUserQueue() const
         {
-            return id;
+            return userQueue;
         }
 
         T& get()

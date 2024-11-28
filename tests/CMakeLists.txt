@@ -19,6 +19,12 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set(CLANG 1)
 endif()
 
+# set(CFI 1)
+# set(TSAN 1)
+# set(MSAN 1)
+# set(UBSAN 1)
+# set(ASAN 1)
+
 if(MSAN)
   if(ASAN)
     message(FATAL_ERROR "ASAN and MSAN are mutually exclusive")
@@ -39,8 +45,8 @@ if(CFI)
     message(FATAL_ERROR "Cannot enable CFI unless using Clang")
   endif()
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -flto=thin")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -flto=thin")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -flto=thin -fvisibility=hidden")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -flto=thin -fvisibility=hidden")
 endif()
 
 if(TSAN)
@@ -68,9 +74,6 @@ if(UBSAN)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-sanitize-recover=undefined")
   endif()
 endif()
-
-
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
 
 set(TEST_SOURCES
     test_rg2.cpp

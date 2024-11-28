@@ -3,7 +3,6 @@
 #include <boost/lockfree/stack.hpp>
 
 #include <concepts>
-#include <condition_variable>
 #include <coroutine>
 #include <cstdint>
 #include <iostream>
@@ -28,12 +27,14 @@ namespace rg
         std::atomic<uint64_t> worker_states{0};
         stack_type stack{};
         stack_type readyQueue{};
-        std::coroutine_handle<> finalize_handle;
-        std::condition_variable cv;
-        std::mutex mtx;
+        // std::condition_variable cv;
+        // std::mutex mtx;
         std::stop_source stop_source;
 
     public:
+        // counts the number of init tasks
+        std::atomic<uint32_t> childCounter = 0;
+
         explicit ThreadPool(std::unsigned_integral auto size)
         {
             threads.reserve(size);
@@ -46,9 +47,10 @@ namespace rg
 
         ~ThreadPool()
         {
-            while(!done())
-            {
-            }
+            std::cout << "pool destructor ccalled" << std::endl;
+            // while(!done())
+            // {
+            // }
             stop_source.request_stop();
 
             // threads.clear();
@@ -60,37 +62,20 @@ namespace rg
 
         void addReadyTask(std::coroutine_handle<> h)
         {
+            std::cout << "added ready task" << std::endl;
             readyQueue.bounded_push(h);
         }
 
         // returns the return of the callable of the coroutine
         void dispatch_task(std::coroutine_handle<> h)
         {
+            std::cout << "added dispatch task" << std::endl;
             stack.bounded_push(h);
         }
 
-        // returns the return of the callable of the coroutine
-        void emplace_init_frame(std::coroutine_handle<> h)
+        void finalize()
         {
-            // lock to ensure the passed handle doesnt notify before cv wait is called wait till pool returns
-            // std::unique_lock<std::mutex> lock(mtx);
-            stack.bounded_push(h);
-            // cv.wait(lock, done());
-            // removing predicate till real check is implemented, trivial check is optimized out
-            // dont go back to main until this is done
-            // cv.wait(lock);
-            // return finalize_handle;
-        }
-
-        void finalize(std::coroutine_handle<> finalize)
-        {
-            while(!done())
-            {
-            }
-            std::lock_guard<std::mutex> lock(mtx);
-            finalize_handle = finalize;
-            // there should only be one waiting
-            cv.notify_one();
+            stop_source.request_stop();
         }
 
     private:
@@ -107,25 +92,27 @@ namespace rg
             // TODO FIX WORKER. Currently they go to sleep after init if tasks take time to be emplaced
             uint64_t mask = (1ULL << index);
             // while(!done())
+            std::coroutine_handle<> h;
             while(true)
             {
                 // seperate this popping order into a function
-                std::coroutine_handle<> h;
                 if(readyQueue.pop(h))
                 {
-                    worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                    std::cout << "ready popped" << std::endl;
+                    // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend
-                    worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                    // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
                     continue;
                 }
                 // TODO think about and fix race condition here. Pop happens but not marked busy
                 if(stack.pop(h))
                 {
-                    worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                    std::cout << "dispatch popped" << std::endl;
+                    // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend
-                    worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                    // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
                 }
                 if(stoken.stop_requested())
                 {
@@ -168,5 +155,11 @@ namespace rg
             //  else execute and DO POOL WORK
             // HOW TO SLEEP?
         }
+
+    public:
+        ThreadPool(ThreadPool const&) = delete;
+        ThreadPool(ThreadPool&&) = delete;
+        ThreadPool& operator=(ThreadPool const&) = delete;
+        ThreadPool& operator=(ThreadPool&&) = delete;
     };
 } // namespace rg
