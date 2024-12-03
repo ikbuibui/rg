@@ -35,8 +35,29 @@ namespace rg
 
     } // namespace access
 
-    // forward declaration to hold shared pointer
-    struct ResourceNode;
+    namespace range_access
+    {
+        struct read
+        {
+            using access_type = read;
+        };
+
+        struct write
+        {
+            using access_type = write;
+        };
+
+        struct aadd
+        {
+            using access_type = aadd;
+        };
+
+        struct amul
+        {
+            using access_type = amul;
+        };
+
+    } // namespace range_access
 
     // Global ID generator
     class GlobalIDGenerator
@@ -124,6 +145,9 @@ namespace rg
 
     template<typename T>
     concept HasAccessType = requires { typename T::access_type; };
+
+    template<typename T>
+    concept NotAccessType = !HasAccessType<T>;
 
     // TODO think one for IOResources and another for others?
     template<HasAccessType A, HasAccessType B>
@@ -224,6 +248,10 @@ namespace rg
     //     // TODO use a better counter
     //     return IOResource<T, ResourceID>{std::forward<T>(t)};
     // }
+
+
+    // forward declaration to hold shared pointer
+    struct ResourceNode;
 
     template<typename TRes, typename AccessMode>
     class ResourceAccess

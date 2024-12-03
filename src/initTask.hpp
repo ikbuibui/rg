@@ -59,23 +59,28 @@ namespace rg
             // used for barrier
             std::condition_variable cv;
             bool task_done = false;
+            bool all_done = false;
 
             SharedCoroutineHandle self;
 
             std::atomic<uint32_t> childCounter = 0;
-            std::atomic<uint32_t>* parentChildCounter;
-            // This is not required, but to have the sharedHandleDeleter consistent with DispatchTask I keep this empty
-            std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
 
             // Task space for the children of this task. Passed in its ptr during await transform
             // std::shared_ptr<ExecutionSpace> rootSpace = std::make_shared<ExecutionSpace>();
 
             template<typename... Args>
             promise_type(ThreadPool* ptr, Args...) : pool_p{ptr}
-                                                   , parentChildCounter{&ptr->childCounter}
             {
                 // TODO can i merge this with init
                 // rootSpace->pool_p = pool_p;
+            }
+
+            ~promise_type()
+            {
+                std::cout << "all done" << std::endl;
+                all_done = true;
+                // std::lock_guard lock(mtx);
+                // cv.notify_all();
             }
 
             InitTask get_return_object()
@@ -96,8 +101,8 @@ namespace rg
                 // rootSpace.reset();
                 // notify thart work is finished here
                 // finalize
-                std::lock_guard lock(mtx);
-                cv.notify_all();
+                // std::lock_guard lock(mtx);
+                // cv.notify_all();
                 // self.reset();
                 return {std::move(self)};
             }
@@ -153,13 +158,36 @@ namespace rg
         {
         }
 
+        // can this be task destructor
         auto finalize()
         {
             // wait for task end, wait for root space to finish
-            //
-            while(coro.promise<promise_type>().childCounter != 0)
+            // if(coro.use_count() == 1)
+            // {
+            //     coro.reset();
+            // }
+            // if(coro.use_count() > 1)
+            // {
+            //     std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
+            //     std::cout << "finalize locked. Task done : " << coro.promise<promise_type>().task_done
+            //               << "child counter : " << coro.promise<promise_type>().childCounter << std::endl;
+            //     coro.promise<promise_type>().cv.wait(
+            //         lock,
+            //         [this] {
+            //             return coro.promise<promise_type>().task_done
+            //                    && coro.promise<promise_type>().childCounter == 0;
+            //         });
+            // }
+            std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
+            while(coro.use_count() > 1)
             {
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                std::cout << "use count : " << coro.use_count() << std::endl;
             }
+            std::cout << "finalize use count hit 1 " << std::endl;
+
+            coro.reset();
+
             // {
             //     std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
             //     coro.promise<promise_type>().cv.wait(

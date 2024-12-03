@@ -1,27 +1,17 @@
 #pragma once
 
-#include <algorithm>
 #include <coroutine>
+#include <iostream>
 #include <memory>
 
 // Custom deleter for coroutine handles
+// dont need the promise type do cleanup in the promise destrouctor
 template<typename PromiseType>
 void coroutine_handle_deleter(void* address)
 {
     auto handle = std::coroutine_handle<PromiseType>::from_address(address);
-    // deregister from resources
-    auto& promise = handle.promise();
-    std::ranges::for_each(
-        promise.resourceNodes,
-        [handle, &promise](auto const& resNode) { resNode->remove_task(handle, promise.pool_p); });
-
-    // decrement child task counter of the parent
-    if(--*handle.promise().parentChildCounter == 0)
-    {
-        // if counter hits zero, notify parent cv
-        // handle.promise().cv.notify_all();
-    }
     // destroy
+    std::cout << "destroy handle" << std::endl;
     handle.destroy();
 }
 
@@ -38,6 +28,16 @@ public:
     explicit SharedCoroutineHandle() : handle_(nullptr)
     {
     }
+
+    // SharedCoroutineHandle(SharedCoroutineHandle const&) = default;
+    // SharedCoroutineHandle(SharedCoroutineHandle&&) = default;
+    // SharedCoroutineHandle& operator=(SharedCoroutineHandle const&) = default;
+    // SharedCoroutineHandle& operator=(SharedCoroutineHandle&&) = default;
+
+    // ~SharedCoroutineHandle()
+    // {
+    //     std::cout << "delete shared handle" << std::endl;
+    // }
 
     // Checks if the handle is valid
     explicit operator bool() const noexcept
@@ -79,6 +79,11 @@ public:
     std::coroutine_handle<> get_coroutine_handle() const
     {
         return std::coroutine_handle<>::from_address(handle_.get());
+    }
+
+    auto use_count() const noexcept
+    {
+        return handle_.use_count();
     }
 
 private:

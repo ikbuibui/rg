@@ -23,35 +23,15 @@ namespace rg
     {
         SharedCoroutineHandle self;
 
-        constexpr bool await_ready() noexcept
+        constexpr bool await_ready() const noexcept
         {
-            self.reset();
             return false;
         }
 
-        constexpr void await_suspend(std::coroutine_handle<>) const noexcept
+        void await_suspend(std::coroutine_handle<>) noexcept
         {
-        }
-
-        constexpr void await_resume() const noexcept
-        {
-        }
-    };
-
-    // TODO add promise type to coroutine handles
-    struct exec_inplace_if
-    {
-        bool ready;
-
-        constexpr bool await_ready() const noexcept
-        {
-            return ready;
-        }
-
-        template<typename TPromise>
-        constexpr void await_suspend(std::coroutine_handle<TPromise> h) const noexcept
-        {
-            h.promise().pool_p->dispatch_task(h);
+            std::cout << "reset handle with use count : " << self.use_count() << std::endl;
+            self.reset();
         }
 
         constexpr void await_resume() const noexcept
@@ -115,15 +95,37 @@ namespace rg
         template<typename TPromise>
         std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> h) const noexcept
         {
+            // save here, as after dispatching self to the threadpool, this awaiter object (holding handle) may be
+            // destroyed, then the return statement would be use after free
+            auto resume_ready_handle = handle.coro.get_coroutine_handle();
+            auto pool_p = h.promise().pool_p;
             // suspend only called when resources are ready
             // assert(resourcesReady);
             // emplace continuation to stack
             // TODO make sure the promise of the continuation can access the return type of
-            h.promise().pool_p->dispatch_task(h);
+            pool_p->dispatch_task(h);
 
             // execute the coroutine
-            return handle.coro.get_coroutine_handle();
+            // USING THIS is dangerous cont may be finished and destroy this awitable object
+            return resume_ready_handle;
         }
+
+        // template<typename TPromise>
+        // bool await_suspend(std::coroutine_handle<TPromise> h) const noexcept
+        // {
+        //     // save here, as after dispatching self to the threadpool, this awaiter object (holding handle) may be
+        //     // destroyed, then the return statement would be use after free
+        //     auto resume_ready_handle = handle.coro.get_coroutine_handle();
+        //     // suspend only called when resources are ready
+        //     // assert(resourcesReady);
+        //     // emplace continuation to stack
+        //     // TODO make sure the promise of the continuation can access the return type of
+        //     h.promise().pool_p->addReadyTask(resume_ready_handle);
+
+        //     // execute the coroutine
+        //     // USING THIS is dangerous cont may be finished and destroy this awitable object
+        //     return false;
+        // }
 
         // passes the return object
         // TODO add return type
@@ -212,21 +214,9 @@ namespace rg
         }
     };
 
-    // wait counter methods
-    // maybe add another one which does waitCounter += val, for resource registration
-    // should this return void?
-    template<typename promise_type>
-    bool notify(std::coroutine_handle<promise_type> h)
-    {
-        auto counter = --h.promise().waitCounter;
-        if(counter == 0)
-            h.promise().pool->dispatch(h);
-        return (counter == 0);
-    }
-
     // forward declaration to make friend
     template<typename Callable, typename... ResourceAccess>
-    auto dispatch_task(Callable&&, ResourceAccess&&...);
+    auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
     // parser coroutine return type
     // returns the value of the callable
@@ -243,7 +233,7 @@ namespace rg
         friend struct DispatchAwaiter;
 
         template<typename Callable, typename... ResourceAccess>
-        friend auto dispatch_task(Callable&&, ResourceAccess&&...);
+        friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
         {
@@ -256,6 +246,7 @@ namespace rg
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
+            // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             bool task_done = false;
             // counts number of children alive
@@ -291,6 +282,20 @@ namespace rg
             //     : self{SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this))}
             // {
             // }
+            ~promise_type()
+            { // deregister from resources
+                std::ranges::for_each(
+                    resourceNodes,
+                    [this](auto const& resNode)
+                    { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
+
+                // decrement child task counter of the parent
+                if(--*parentChildCounter == 0)
+                {
+                    // if counter hits zero, notify parent cv
+                    // handle.promise().cv.notify_all();
+                }
+            }
 
             Task get_return_object()
             {
@@ -334,8 +339,19 @@ namespace rg
                 }
                 // we are done, no need to hold self anymore.
                 // self.reset();
-
-                // sometimes this deletes the coro and thus we cant unlock
+                // This is safe because at final suspend point no other threads will concurrently add siblings
+                // all siblings have been added already
+                // if(self.use_count() == 1)
+                // {
+                //     std::cout << "in if " << std::endl;
+                // }
+                // else
+                // {
+                //     std::cout << "in else " << std::endl;
+                //     assert(self.use_count() != 0);
+                //     // safe because this will not
+                //     self.reset();
+                // }
                 return {std::move(self)};
             }
 
@@ -427,29 +443,87 @@ namespace rg
     // TODO pass the pool to the task
     // TODO pass in a way that i dont have to store stuff and make copies
     // Callable is a Task
+    // thread_local static uint counter = 0;
+
+    // Helper function to process only handles satisfying HasAccessType
+    template<typename Func, typename... AccessHandles>
+    void for_each_access_type(Func&& func, AccessHandles&&... accessHandles)
+    {
+        // Expand the parameter pack and apply the function only to handles satisfying HasAccessType
+        (...,
+         (void) (HasAccessType<std::decay_t<AccessHandles>> ? func(std::forward<AccessHandles>(accessHandles))
+                                                            : void()));
+    }
+
     template<typename Callable, typename... ResourceAccess>
     auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles)
     {
         // TODO bind resources with restrictions applied
         // TODO Think about copies, references and lifetimes
+        // std::cout << "Counter for thread " << std::this_thread::get_id() << " is " << counter++ << std::endl;
 
+
+        // Helper lambda to process each accessHandle
+        auto process_handle = [](auto&& handle) -> decltype(auto)
+        {
+            if constexpr(HasAccessType<std::decay_t<decltype(handle)>>)
+            {
+                return handle.get(); // Call get() for types with access type
+            }
+            else
+            {
+                return std::forward<decltype(handle)>(handle); // Pass other types directly
+            }
+        };
 
         // create the awaitabletask coroutine.
-        auto handle = std::invoke(std::forward<Callable>(callable), accessHandles.get()...);
+        auto handle = std::invoke(
+            std::forward<Callable>(callable),
+            process_handle(std::forward<ResourceAccess>(accessHandles))...);
         // , std::forward<typename ResourceAccess::value_type>(accessHandles.get())...);
 
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
         auto& resourceNodes = handlePromise.resourceNodes;
         // can access coro because it this function is a friend
+        // TODO fix! this reserves too large a space, not all accessHandles are resources
         resourceNodes.reserve(sizeof...(accessHandles));
-        (resourceNodes.push_back(accessHandles.getUserQueue()), ...);
+
+        // Fold expression only for handles satisfying HasAccessType
+        (...,
+         (
+             [&resourceNodes, &handle, &handlePromise](auto const& accessHandle)
+             {
+                 if constexpr(HasAccessType<std::decay_t<decltype(accessHandle)>>)
+                 {
+                     resourceNodes.push_back(accessHandle.getUserQueue());
+
+                     accessHandle.getUserQueue()->add_task(
+                         {handle.coro.get_coroutine_handle(),
+                          typename std::decay_t<decltype(accessHandle)>::access_type{},
+                          &handlePromise.waitCounter});
+                 }
+             }(std::forward<ResourceAccess>(accessHandles))));
 
         // TODO make sure all resources are registered before someone deregistering sends this to readyQueue
-        (accessHandles.getUserQueue()->add_task(
-             {handle.coro.get_coroutine_handle(), typename ResourceAccess::access_type{}, &handlePromise.waitCounter}),
-         ...);
+        // for_each_access_type(
+        //     [&handlePromise, &resourceNodes, &handle](auto const& accessHandle)
+        //     {
+        //         resourceNodes.push_back(accessHandle.getUserQueue());
 
-        handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE);
+        //         accessHandle.getUserQueue()->add_task(
+        //             {handle.coro.get_coroutine_handle(),
+        //              typename std::decay_t<decltype(accessHandle)>::access_type{},
+        //              &handlePromise.waitCounter});
+        //     },
+        //     accessHandles...);
+
+
+        auto wc = handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE);
+        bool resReady = (wc == INVALID_WAIT_STATE);
+
+        // bool resReady = (handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE) == INVALID_WAIT_STATE);
+
+        std::cout << "wc " << wc << " resources ready?" << resReady << std::endl;
         // auto bound_callable = std::bind_front(std::forward<Callable>(callable), handles.obj...);
 
         //  Bind the resources as arguments to the callable/coroutine
@@ -464,7 +538,7 @@ namespace rg
         //  returns task returnHandleObject
 
         // final_suspend removes from task and notifies
-        return DispatchAwaiter{std::move(handle), handlePromise.waitCounter == 0};
+        return DispatchAwaiter{std::move(handle), resReady};
     }
 
     // TODO Dispatch for

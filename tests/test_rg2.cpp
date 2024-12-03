@@ -152,7 +152,7 @@ auto taskWithRes(rg::ThreadPool* ptr) -> rg::InitTask<int>
 
 TEST_CASE("Tasks with resources")
 {
-    auto poolObj = rg::init(6);
+    auto poolObj = rg::init(2);
     auto orc = taskWithRes(poolObj.pool_ptr());
     orc.finalize();
     std::cout << "finalize done" << std::endl;

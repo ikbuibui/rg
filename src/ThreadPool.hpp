@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MPMCQueue.hpp"
+
 #include <boost/lockfree/stack.hpp>
 
 #include <concepts>
@@ -18,23 +20,22 @@ namespace rg
     // TODO SPECIFY PROMISE TYPE IN COROUTINE HANDLE
     struct ThreadPool
     {
-        using stack_type
-            = boost::lockfree::stack<std::coroutine_handle<>, boost::lockfree::capacity<threadPoolStackSize>>;
+        // using stack_type
+        //     = boost::lockfree::stack<std::coroutine_handle<>, boost::lockfree::capacity<threadPoolStackSize>>;
+        using stack_type = rigtorp::MPMCQueue<std::coroutine_handle<>>;
+
 
     private:
-        std::vector<std::jthread> threads;
         // bitfield where 0 is free and 1 is busy
         std::atomic<uint64_t> worker_states{0};
-        stack_type stack{};
-        stack_type readyQueue{};
+        stack_type stack{threadPoolStackSize};
+        stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
-        // std::mutex mtx;
+        std::mutex mtx;
         std::stop_source stop_source;
+        std::vector<std::jthread> threads;
 
     public:
-        // counts the number of init tasks
-        std::atomic<uint32_t> childCounter = 0;
-
         explicit ThreadPool(std::unsigned_integral auto size)
         {
             threads.reserve(size);
@@ -47,12 +48,13 @@ namespace rg
 
         ~ThreadPool()
         {
-            std::cout << "pool destructor ccalled" << std::endl;
+            std::cout << "pool destructor called" << std::endl;
             // while(!done())
             // {
             // }
             stop_source.request_stop();
-
+            // Ensure all threads are joined and destroyed. Not needed if order of destruction is correct
+            threads.clear();
             // threads.clear();
             // std::this_thread::sleep_for(std::chrono::seconds(3));
             // std::lock_guard<std::mutex> lock(mtx);
@@ -63,14 +65,16 @@ namespace rg
         void addReadyTask(std::coroutine_handle<> h)
         {
             std::cout << "added ready task" << std::endl;
-            readyQueue.bounded_push(h);
+            // readyQueue.bounded_push(h);
+            readyQueue.push(h);
         }
 
         // returns the return of the callable of the coroutine
         void dispatch_task(std::coroutine_handle<> h)
         {
             std::cout << "added dispatch task" << std::endl;
-            stack.bounded_push(h);
+            // stack.bounded_push(h);
+            stack.push(h);
         }
 
         void finalize()
@@ -87,16 +91,17 @@ namespace rg
             return worker_states.load(std::memory_order_acquire) == 0 && stack.empty() && readyQueue.empty();
         }
 
-        void worker(uint16_t index, std::stop_token stoken)
+        void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
         {
             // TODO FIX WORKER. Currently they go to sleep after init if tasks take time to be emplaced
-            uint64_t mask = (1ULL << index);
+            // uint64_t mask = (1ULL << index);
             // while(!done())
+            std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
             std::coroutine_handle<> h;
             while(true)
             {
                 // seperate this popping order into a function
-                if(readyQueue.pop(h))
+                if(readyQueue.try_pop(h))
                 {
                     std::cout << "ready popped" << std::endl;
                     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
@@ -106,7 +111,7 @@ namespace rg
                     continue;
                 }
                 // TODO think about and fix race condition here. Pop happens but not marked busy
-                if(stack.pop(h))
+                if(stack.try_pop(h))
                 {
                     std::cout << "dispatch popped" << std::endl;
                     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
