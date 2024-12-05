@@ -30,7 +30,7 @@ namespace rg
 
         void await_suspend(std::coroutine_handle<>) noexcept
         {
-            std::cout << "reset handle with use count : " << self.use_count() << std::endl;
+            // std::cout << "reset handle with use count : " << self.use_count() << std::endl;
             self.reset();
         }
 
@@ -523,7 +523,7 @@ namespace rg
 
         // bool resReady = (handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE) == INVALID_WAIT_STATE);
 
-        std::cout << "wc " << wc << " resources ready?" << resReady << std::endl;
+        // std::cout << "wc " << wc << " resources ready?" << resReady << std::endl;
         // auto bound_callable = std::bind_front(std::forward<Callable>(callable), handles.obj...);
 
         //  Bind the resources as arguments to the callable/coroutine

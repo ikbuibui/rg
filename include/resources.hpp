@@ -307,18 +307,18 @@ namespace rg
         // Constructor for lvalue (stores a reference)
         Resource(T& ref) : storage(std::forward<std::reference_wrapper<T>>(ref))
         {
-            std::cout << "Stored reference to lvalue\n";
+            // std::cout << "Stored reference to lvalue\n";
         }
 
         // Constructor for rvalue (temporary value)
         Resource(T&& value) : storage(std::forward<T>(value))
         {
-            std::cout << "Moved temporary value into Resource" << std::endl;
+            // std::cout << "Moved temporary value into Resource" << std::endl;
         }
 
         Resource() : storage(std::forward<T>(T{}))
         {
-            std::cout << "Default construct T" << std::endl;
+            // std::cout << "Default construct T" << std::endl;
         }
 
         std::shared_ptr<ResourceNode> getUserQueue() const

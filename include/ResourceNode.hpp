@@ -69,12 +69,7 @@ namespace rg
         // Constructor
         ResourceNode(uint32_t uid) : resource_uid(uid), firstNotReady(tasks.end()), lastTask(tasks.before_begin())
         {
-            std::cout << "node id : " << resource_uid << " created" << std::endl;
-        }
-
-        ~ResourceNode()
-        {
-            std::cout << "node id : " << resource_uid << " destroyed" << std::endl;
+            // std::cout << "node id : " << resource_uid << " created" << std::endl;
         }
 
         auto getId() const
@@ -86,7 +81,7 @@ namespace rg
         // TODO think about rvalue reference
         void add_task(task_access&& task)
         {
-            std::cout << "add task on node id : " << resource_uid << std::endl;
+            // std::cout << "add task on node id : " << resource_uid << std::endl;
 
             // add task to resrource queue
             // TODO think about empalce
@@ -104,7 +99,7 @@ namespace rg
                 if(it != firstNotReady)
                 {
                     // someone is blocking, add and wait
-                    std::cout << "soemone is blocking" << std::endl;
+                    // std::cout << "soemone is blocking" << std::endl;
                     lastTask = tasks.insert_after(lastTask, task);
                     firstNotReady = lastTask;
                     ++*task.waitCounter_p;
@@ -112,7 +107,7 @@ namespace rg
                 else
                 {
                     //  no one is blocking. Add as ready
-                    std::cout << "no one blocking" << std::endl;
+                    // std::cout << "no one blocking" << std::endl;
                     lastTask = tasks.insert_after(lastTask, task);
                     // set to end all the time since end might change after adding a task
                     firstNotReady = tasks.end();
@@ -120,7 +115,7 @@ namespace rg
             }
             else
             {
-                std::cout << "first not ready is not end" << std::endl;
+                // std::cout << "first not ready is not end" << std::endl;
 
                 lastTask = tasks.insert_after(lastTask, task);
                 // firstNotReady stays the same
@@ -231,7 +226,7 @@ namespace rg
                     }
                     else
                     {
-                        std::cout << "decrement wait counter" << std::endl;
+                        // std::cout << "decrement wait counter" << std::endl;
                         // no one else is blocking
                         // set to ready
                         if(--*(it->waitCounter_p) == 0)

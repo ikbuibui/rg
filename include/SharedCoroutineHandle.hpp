@@ -11,7 +11,7 @@ void coroutine_handle_deleter(void* address)
 {
     auto handle = std::coroutine_handle<PromiseType>::from_address(address);
     // destroy
-    std::cout << "destroy handle" << std::endl;
+    // std::cout << "destroy handle" << std::endl;
     handle.destroy();
 }
 

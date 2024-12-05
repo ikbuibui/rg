@@ -19,7 +19,7 @@ namespace rg
         template<typename promise_type>
         bool await_suspend(std::coroutine_handle<promise_type> h) noexcept
         {
-            std::cout << "in barrier" << std::endl;
+            // std::cout << "in barrier" << std::endl;
 
             auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
             auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
@@ -39,9 +39,10 @@ namespace rg
             // while(h.promise().childCounter != 0)
             // {
             // }
-            std::cout << "barrier done" << std::endl;
+
             // std::unique_lock<std::mutex> lock(h.promise().mtx);
             // h.promise().cv.wait(lock, [this, h] { return h.promise().childCounter == 0; });
+            // std::cout << "barrier done" << std::endl;
             return false;
         };
 

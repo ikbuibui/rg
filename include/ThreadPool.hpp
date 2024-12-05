@@ -48,7 +48,7 @@ namespace rg
 
         ~ThreadPool()
         {
-            std::cout << "pool destructor called" << std::endl;
+            // std::cout << "pool destructor called" << std::endl;
             // while(!done())
             // {
             // }
@@ -64,7 +64,7 @@ namespace rg
 
         void addReadyTask(std::coroutine_handle<> h)
         {
-            std::cout << "added ready task" << std::endl;
+            // std::cout << "added ready task" << std::endl;
             // readyQueue.bounded_push(h);
             readyQueue.push(h);
         }
@@ -72,7 +72,7 @@ namespace rg
         // returns the return of the callable of the coroutine
         void dispatch_task(std::coroutine_handle<> h)
         {
-            std::cout << "added dispatch task" << std::endl;
+            // std::cout << "added dispatch task" << std::endl;
             // stack.bounded_push(h);
             stack.push(h);
         }
@@ -96,14 +96,14 @@ namespace rg
             // TODO FIX WORKER. Currently they go to sleep after init if tasks take time to be emplaced
             // uint64_t mask = (1ULL << index);
             // while(!done())
-            std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
+            // std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
             std::coroutine_handle<> h;
             while(true)
             {
                 // seperate this popping order into a function
                 if(readyQueue.try_pop(h))
                 {
-                    std::cout << "ready popped" << std::endl;
+                    // std::cout << "ready popped" << std::endl;
                     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend
@@ -113,7 +113,7 @@ namespace rg
                 // TODO think about and fix race condition here. Pop happens but not marked busy
                 if(stack.try_pop(h))
                 {
-                    std::cout << "dispatch popped" << std::endl;
+                    // std::cout << "dispatch popped" << std::endl;
                     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
                     // destruction of h is dealt with final suspend type or in get if something is returend

@@ -77,7 +77,7 @@ namespace rg
 
             ~promise_type()
             {
-                std::cout << "all done" << std::endl;
+                // std::cout << "all done" << std::endl;
                 all_done = true;
                 // std::lock_guard lock(mtx);
                 // cv.notify_all();
@@ -96,7 +96,7 @@ namespace rg
 
             DeleteAwaiter final_suspend() noexcept
             {
-                std::cout << "final suspend called" << std::endl;
+                // std::cout << "final suspend called" << std::endl;
                 task_done = true;
                 // rootSpace.reset();
                 // notify thart work is finished here
@@ -178,13 +178,13 @@ namespace rg
             //                    && coro.promise<promise_type>().childCounter == 0;
             //         });
             // }
-            std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
+            // std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
             while(coro.use_count() > 1)
             {
                 std::this_thread::sleep_for(std::chrono::seconds(3));
-                std::cout << "use count : " << coro.use_count() << std::endl;
+                // std::cout << "use count : " << coro.use_count() << std::endl;
             }
-            std::cout << "finalize use count hit 1 " << std::endl;
+            // std::cout << "finalize use count hit 1 " << std::endl;
 
             coro.reset();
 
