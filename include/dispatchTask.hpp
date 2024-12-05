@@ -75,9 +75,9 @@ namespace rg
     {
         // using ResourceAccessList
         //     = TypeList<ResourceAccess<ResourceHandles::resource_id, typename ResourceHandles::access_type>...>;
-        bool resourcesReady;
         // takes ownership of the handle, and passes it on in await resume
         Task<T> handle;
+        bool resourcesReady;
 
         DispatchAwaiter(Task<T>&& handleObj, bool resourcesReady)
             : handle{std::forward<Task<T>>(handleObj)}
