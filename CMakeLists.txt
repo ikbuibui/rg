@@ -33,6 +33,9 @@ target_compile_options(
             $<$<CXX_COMPILER_ID:Clang>:-Weverything>
             $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 
+find_package(Threads REQUIRED)
+target_link_libraries(rg INTERFACE Threads::Threads)
+
 # Examples & Tests
 
 option(BUILD_EXAMPLES "Build the examples" OFF)
