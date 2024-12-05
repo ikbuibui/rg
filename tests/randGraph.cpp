@@ -211,7 +211,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
         }
 
     std::cout << "tasks created" << std::endl;
-    co_await BarrierAwaiter{};
+    co_await rg::BarrierAwaiter{};
     std::cout << "starting check" << std::endl;
 
     for(unsigned i{0}; i < n_resources; ++i)

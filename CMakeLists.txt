@@ -33,8 +33,19 @@ target_compile_options(
             $<$<CXX_COMPILER_ID:Clang>:-Weverything>
             $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 
+# Examples & Tests
+
+option(BUILD_EXAMPLES "Build the examples" OFF)
+option(BUILD_TESTING "Build the tests" OFF)
+
+if(BUILD_EXAMPLES)
+  add_subdirectory("examples/")
+endif()
+
 # Add subdirectory for tests
-add_subdirectory(tests)
+if(BUILD_TESTING)
+  add_subdirectory("tests/")
+endif()
 
 # Installation
 install(
