@@ -9,15 +9,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Add custom flags for different build types
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -fcoroutines")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -fcoroutines -DNDEBUG")
 
 # Find Boost for header only boost.lockfree
 # find_package(Boost REQUIRED)
 # include_directories(${Boost_INCLUDE_DIRS})
 
 # Include the header files
-include_directories(src)
+include_directories(include)
 
 # Add the library target (header-only)
 add_library(rg INTERFACE)
