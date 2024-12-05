@@ -2,8 +2,9 @@
 
 #include "MPMCQueue.hpp"
 
-#include <boost/lockfree/stack.hpp>
+// #include <boost/lockfree/stack.hpp>
 
+#include <algorithm>
 #include <concepts>
 #include <coroutine>
 #include <cstdint>
