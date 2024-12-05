@@ -20,7 +20,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # set(CFI 1)
-set(TSAN 1)
+# set(TSAN 1)
 # set(MSAN 1)
 # set(UBSAN 1)
 # set(ASAN 1)
@@ -76,21 +76,21 @@ if(UBSAN)
 endif()
 
 set(TEST_SOURCES
-    # test_rg2.cpp
+    # test_rg.cpp
     # randomGraph.cpp
     randGraph.cpp
 )
 
-set(TEST_TARGET rg2_tests)
+set(TEST_TARGET rg_tests)
 
 # Create the test executable
 add_executable(${TEST_TARGET} ${TEST_SOURCES})
 
 # Link the library and Catch2
-# target_link_libraries(${TEST_TARGET} PRIVATE rg2 Catch2::Catch2WithMain)
-target_link_libraries(${TEST_TARGET} PRIVATE rg2)
+# target_link_libraries(${TEST_TARGET} PRIVATE rg Catch2::Catch2WithMain)
+target_link_libraries(${TEST_TARGET} PRIVATE rg)
 
 # Enable CTest
 #include(CTest)
 #include(Catch)
-#catch_discover_tests(rg2_tests)
+#catch_discover_tests(rg_tests)

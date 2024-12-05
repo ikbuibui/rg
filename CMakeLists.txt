@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(rg2 VERSION 0.1.0 LANGUAGES CXX)
+project(rg VERSION 0.1.0 LANGUAGES CXX)
 
 # Set build type
 set(CMAKE_BUILD_TYPE Debug)
@@ -13,15 +13,15 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # Find Boost for header only boost.lockfree
-find_package(Boost REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
+# find_package(Boost REQUIRED)
+# include_directories(${Boost_INCLUDE_DIRS})
 
 # Include the header files
 include_directories(src)
 
 # Add the library target (header-only)
-add_library(rg2 INTERFACE)
-target_include_directories(rg2 INTERFACE include)
+add_library(rg INTERFACE)
+target_include_directories(rg INTERFACE include)
 
 # Add subdirectory for tests
 add_subdirectory(tests)

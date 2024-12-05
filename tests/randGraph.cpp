@@ -1,4 +1,5 @@
 #include "ThreadPool.hpp"
+#include "barrier.hpp"
 #include "dispatchTask.hpp"
 #include "init.hpp"
 #include "initTask.hpp"
@@ -31,11 +32,11 @@ void hash(unsigned task_id, std::array<uint64_t, 8>& val)
     sha256_process(state, (uint8_t*) &val[0], sizeof(val));
 }
 
-std::chrono::microseconds task_duration(2000);
-unsigned n_resources = 5;
-unsigned n_tasks = 16;
-unsigned n_threads = 6;
-unsigned min_dependencies = 1;
+std::chrono::microseconds task_duration(2);
+unsigned n_resources = 16;
+unsigned n_tasks = 128;
+unsigned n_threads = 8;
+unsigned min_dependencies = 0;
 unsigned max_dependencies = 5;
 std::mt19937 gen;
 
@@ -210,7 +211,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
         }
 
     std::cout << "tasks created" << std::endl;
-
+    co_await BarrierAwaiter{};
     std::cout << "starting check" << std::endl;
 
     for(unsigned i{0}; i < n_resources; ++i)
