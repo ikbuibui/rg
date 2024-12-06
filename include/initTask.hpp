@@ -179,11 +179,28 @@ namespace rg
             //         });
             // }
             // std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
+            //
+            auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
+            auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
+
             while(coro.use_count() > 1)
             {
-                std::this_thread::sleep_for(std::chrono::seconds(3));
-                // std::cout << "use count : " << coro.use_count() << std::endl;
+                if(backoff_time < max_backoff_time)
+                {
+                    std::this_thread::sleep_for(backoff_time);
+                    backoff_time *= 2;
+                }
+                else
+                {
+                    std::this_thread::yield();
+                }
             }
+
+            // while(coro.use_count() > 1)
+            // {
+            //     std::this_thread::sleep_for(std::chrono::seconds(3));
+            //     // std::cout << "use count : " << coro.use_count() << std::endl;
+            // }
             // std::cout << "finalize use count hit 1 " << std::endl;
 
             coro.reset();
