@@ -117,7 +117,8 @@ namespace rg
         {
             // TODO
             // if workers are free and coro stack is empty
-            return worker_states == 0 && stack.empty() && readyQueue.empty();
+            // return worker_states == 0 && stack.empty() && readyQueue.empty();
+            return worker_states == 0 && readyQueue.empty();
         }
 
         // void pinThreadToCore(int core_index)
