@@ -34,9 +34,9 @@ namespace rg
         // bitfield where 0 is free and 1 is busy
         std::atomic<uint64_t> worker_states{0};
         thread_local static inline uint16_t thread_index;
-        // std::vector<std::unique_ptr<stack_type>> thread_queues;
+        std::vector<std::unique_ptr<stack_type>> thread_queues;
         // stack_type stack{threadPoolStackSize};
-        stack_type readyQueue{threadPoolStackSize};
+        // stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
         // std::mutex mtx;
         std::stop_source stop_source;
@@ -55,11 +55,11 @@ namespace rg
             //     throw std::runtime_error("Insufficient cores for thread pool size.");
             // }
 
-            // thread_queues.reserve(size);
-            // std::generate_n(
-            //     std::back_inserter(thread_queues),
-            //     size,
-            //     [this] { return std::make_unique<stack_type>(threadPoolStackSize); });
+            thread_queues.reserve(size);
+            std::generate_n(
+                std::back_inserter(thread_queues),
+                size,
+                [this] { return std::make_unique<stack_type>(threadPoolStackSize); });
 
             threads.reserve(size);
             uint16_t i = 0;
@@ -87,8 +87,8 @@ namespace rg
 
         void addTask(std::coroutine_handle<> h)
         {
-            // thread_queues[thread_index]->push(h);
-            readyQueue.push(h);
+            thread_queues[thread_index]->push(h);
+            // readyQueue.push(h);
         }
 
         // void addReadyTask(std::coroutine_handle<> h)
@@ -113,13 +113,12 @@ namespace rg
 
     private:
         // check if thread pool has no more work
-        bool done() const
-        {
-            // TODO
-            // if workers are free and coro stack is empty
-            // return worker_states == 0 && stack.empty() && readyQueue.empty();
-            return worker_states == 0 && readyQueue.empty();
-        }
+        // bool done() const
+        // {
+        //     // TODO
+        //     // if workers are free and coro stack is empty
+        //     return worker_states == 0 && stack.empty() && readyQueue.empty();
+        // }
 
         // void pinThreadToCore(int core_index)
         // {
@@ -142,61 +141,63 @@ namespace rg
         void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
         {
             thread_index = index;
+
             // mt19937 seems overkill. Heavier, higher quality random number
             // std::minstd_rand and XorShift are alternatives
-            // thread_local rg::XorShift rng(std::random_device{}());
-            // std::uniform_int_distribution<size_t> dist(0, thread_queues.size() - 1);
+            thread_local rg::XorShift rng(std::random_device{}());
+            std::uniform_int_distribution<uint32_t> dist(0, thread_queues.size() - 1);
+
             // uint64_t mask = (1ULL << index);
             // while(!done())
             // std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
             std::coroutine_handle<> h;
             while(true)
             {
-                // if(thread_queues[index]->try_pop(h))
-                // {
-                //     h.resume();
-                //     continue;
-                // }
+                if(thread_queues[index]->try_pop(h))
+                {
+                    h.resume();
+                    continue;
+                }
 
-                // // Attempt to steal from other queues
-                // // while(true)
-                // // {
-                // //     if(i != index && thread_queues[i]->try_pop(h))
-                // //     {
-                // //         h.resume();
-                // //         break;
-                // //     }
-                // // }
-
+                // Attempt to steal from other queues
                 // while(true)
                 // {
-                //     size_t victim = dist(rng);
-                //     if(victim != index && thread_queues[victim]->try_pop(h))
+                //     if(i != index && thread_queues[i]->try_pop(h))
                 //     {
                 //         h.resume();
                 //         break;
                 //     }
                 // }
 
-                // seperate this popping order into a function
-                if(readyQueue.try_pop(h))
+                while(true)
                 {
-                    // std::cout << "ready popped" << std::endl;
-                    // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
-                    h.resume();
-                    // destruction of h is dealt with final suspend type or in get if something is returend
-                    // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
-                    continue;
+                    size_t victim = dist(rng);
+                    if(victim != index && thread_queues[victim]->try_pop(h))
+                    {
+                        h.resume();
+                        break;
+                    }
                 }
-                // TODO think about and fix race condition here. Pop happens but not marked busy
-                // if(stack.try_pop(h))
+
+                // seperate this popping order into a function
+                // if(readyQueue.try_pop(h))
                 // {
-                //     // std::cout << "dispatch popped" << std::endl;
+                //     // std::cout << "ready popped" << std::endl;
                 //     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                 //     h.resume();
                 //     // destruction of h is dealt with final suspend type or in get if something is returend
                 //     // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                //     continue;
                 // }
+                // // TODO think about and fix race condition here. Pop happens but not marked busy
+                // // if(stack.try_pop(h))
+                // // {
+                // //     // std::cout << "dispatch popped" << std::endl;
+                // //     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                // //     h.resume();
+                // //     // destruction of h is dealt with final suspend type or in get if something is returend
+                // //     // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                // // }
                 if(stoken.stop_requested())
                 {
                     return;
