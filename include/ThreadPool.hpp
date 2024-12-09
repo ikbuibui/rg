@@ -41,7 +41,7 @@ namespace rg
         // std::mutex mtx;
         std::stop_source stop_source;
         std::vector<std::jthread> threads;
-        hwloc_topology_t topology; // hwloc topology object
+        // hwloc_topology_t topology;
 
     public:
         explicit ThreadPool(std::unsigned_integral auto size)
