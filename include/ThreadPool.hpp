@@ -5,6 +5,8 @@
 
 // #include <boost/lockfree/stack.hpp>
 
+// #include <hwloc.h>
+
 #include <algorithm>
 #include <concepts>
 #include <coroutine>
@@ -32,22 +34,32 @@ namespace rg
         // bitfield where 0 is free and 1 is busy
         std::atomic<uint64_t> worker_states{0};
         thread_local static inline uint16_t thread_index;
-        std::vector<std::unique_ptr<stack_type>> thread_queues;
-        stack_type stack{threadPoolStackSize};
+        // std::vector<std::unique_ptr<stack_type>> thread_queues;
+        // stack_type stack{threadPoolStackSize};
         stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
         // std::mutex mtx;
         std::stop_source stop_source;
         std::vector<std::jthread> threads;
+        hwloc_topology_t topology; // hwloc topology object
 
     public:
         explicit ThreadPool(std::unsigned_integral auto size)
         {
-            thread_queues.reserve(size);
-            std::generate_n(
-                std::back_inserter(thread_queues),
-                size,
-                [this] { return std::make_unique<stack_type>(threadPoolStackSize); });
+            // hwloc_topology_init(&topology);
+            // hwloc_topology_load(topology);
+
+            // int num_cores = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_CORE);
+            // if(num_cores < static_cast<int>(size))
+            // {
+            //     throw std::runtime_error("Insufficient cores for thread pool size.");
+            // }
+
+            // thread_queues.reserve(size);
+            // std::generate_n(
+            //     std::back_inserter(thread_queues),
+            //     size,
+            //     [this] { return std::make_unique<stack_type>(threadPoolStackSize); });
 
             threads.reserve(size);
             uint16_t i = 0;
@@ -75,7 +87,8 @@ namespace rg
 
         void addTask(std::coroutine_handle<> h)
         {
-            thread_queues[thread_index]->push(h);
+            // thread_queues[thread_index]->push(h);
+            readyQueue.push(h);
         }
 
         // void addReadyTask(std::coroutine_handle<> h)
@@ -107,55 +120,73 @@ namespace rg
             return worker_states == 0 && stack.empty() && readyQueue.empty();
         }
 
+        // void pinThreadToCore(int core_index)
+        // {
+        //     hwloc_obj_t core = hwloc_get_obj_by_type(topology, HWLOC_OBJ_CORE, core_index);
+        //     if(!core)
+        //     {
+        //         throw std::runtime_error("Failed to get core for pinning.");
+        //     }
+
+        //     hwloc_cpuset_t cpuset = hwloc_bitmap_dup(core->cpuset);
+        //     hwloc_bitmap_singlify(cpuset); // Restrict to a single core
+        //     if(hwloc_set_cpubind(topology, cpuset, HWLOC_CPUBIND_THREAD) == -1)
+        //     {
+        //         hwloc_bitmap_free(cpuset);
+        //         throw std::runtime_error("Failed to bind thread to core.");
+        //     }
+        //     hwloc_bitmap_free(cpuset);
+        // }
+
         void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
         {
             thread_index = index;
             // mt19937 seems overkill. Heavier, higher quality random number
             // std::minstd_rand and XorShift are alternatives
-            thread_local rg::XorShift rng(std::random_device{}());
-            std::uniform_int_distribution<size_t> dist(0, thread_queues.size() - 1);
+            // thread_local rg::XorShift rng(std::random_device{}());
+            // std::uniform_int_distribution<size_t> dist(0, thread_queues.size() - 1);
             // uint64_t mask = (1ULL << index);
             // while(!done())
             // std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
             std::coroutine_handle<> h;
             while(true)
             {
-                if(thread_queues[index]->try_pop(h))
-                {
-                    h.resume();
-                    continue;
-                }
+                // if(thread_queues[index]->try_pop(h))
+                // {
+                //     h.resume();
+                //     continue;
+                // }
 
-                // Attempt to steal from other queues
+                // // Attempt to steal from other queues
+                // // while(true)
+                // // {
+                // //     if(i != index && thread_queues[i]->try_pop(h))
+                // //     {
+                // //         h.resume();
+                // //         break;
+                // //     }
+                // // }
+
                 // while(true)
                 // {
-                //     if(i != index && thread_queues[i]->try_pop(h))
+                //     size_t victim = dist(rng);
+                //     if(victim != index && thread_queues[victim]->try_pop(h))
                 //     {
                 //         h.resume();
                 //         break;
                 //     }
                 // }
 
-                while(true)
-                {
-                    size_t victim = dist(rng);
-                    if(victim != index && thread_queues[victim]->try_pop(h))
-                    {
-                        h.resume();
-                        break;
-                    }
-                }
-
                 // seperate this popping order into a function
-                // if(readyQueue.try_pop(h))
-                // {
-                //     // std::cout << "ready popped" << std::endl;
-                //     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
-                //     h.resume();
-                //     // destruction of h is dealt with final suspend type or in get if something is returend
-                //     // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
-                //     continue;
-                // }
+                if(readyQueue.try_pop(h))
+                {
+                    // std::cout << "ready popped" << std::endl;
+                    // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                    h.resume();
+                    // destruction of h is dealt with final suspend type or in get if something is returend
+                    // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                    continue;
+                }
                 // TODO think about and fix race condition here. Pop happens but not marked busy
                 // if(stack.try_pop(h))
                 // {
