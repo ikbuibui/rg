@@ -21,6 +21,7 @@ namespace rg
 
     // if size is known at compile time, get it from init as template param and use it for faster containers
     constexpr uint32_t threadPoolStackSize = 64u;
+    constexpr uint32_t randomStealAttempts = 64u;
 
     // TODO SPECIFY PROMISE TYPE IN COROUTINE HANDLE
     struct ThreadPool
@@ -160,7 +161,7 @@ namespace rg
                 }
 
                 // Attempt to steal from other queues
-                // while(true)
+                // for(uint32_t i = 0; i < thread_queues.size(); ++i)
                 // {
                 //     if(i != index && thread_queues[i]->try_pop(h))
                 //     {
@@ -168,8 +169,9 @@ namespace rg
                 //         break;
                 //     }
                 // }
-
-                while(true)
+                // increases latency when everyhting is done, as stealing may still be tried for a while after stop has
+                // been requested
+                for(uint32_t attempts = 0; attempts < randomStealAttempts; ++attempts)
                 {
                     size_t victim = dist(rng);
                     if(victim != index && thread_queues[victim]->try_pop(h))
