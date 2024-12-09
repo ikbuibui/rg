@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MPMCQueue.hpp"
+#include "random.hpp"
 
 // #include <boost/lockfree/stack.hpp>
 
@@ -9,6 +10,7 @@
 #include <coroutine>
 #include <cstdint>
 #include <iostream>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -29,6 +31,8 @@ namespace rg
     private:
         // bitfield where 0 is free and 1 is busy
         std::atomic<uint64_t> worker_states{0};
+        thread_local static inline uint16_t thread_index;
+        std::vector<std::unique_ptr<stack_type>> thread_queues;
         stack_type stack{threadPoolStackSize};
         stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
@@ -39,6 +43,12 @@ namespace rg
     public:
         explicit ThreadPool(std::unsigned_integral auto size)
         {
+            thread_queues.reserve(size);
+            std::generate_n(
+                std::back_inserter(thread_queues),
+                size,
+                [this] { return std::make_unique<stack_type>(threadPoolStackSize); });
+
             threads.reserve(size);
             uint16_t i = 0;
             std::generate_n(
@@ -63,20 +73,25 @@ namespace rg
             // cv.notify_one();
         }
 
-        void addReadyTask(std::coroutine_handle<> h)
+        void addTask(std::coroutine_handle<> h)
         {
-            // std::cout << "added ready task" << std::endl;
-            // readyQueue.bounded_push(h);
-            readyQueue.push(h);
+            thread_queues[thread_index]->push(h);
         }
 
+        // void addReadyTask(std::coroutine_handle<> h)
+        // {
+        //     // std::cout << "added ready task" << std::endl;
+        //     // readyQueue.bounded_push(h);
+        //     readyQueue.push(h);
+        // }
+
         // returns the return of the callable of the coroutine
-        void dispatch_task(std::coroutine_handle<> h)
-        {
-            // std::cout << "added dispatch task" << std::endl;
-            // stack.bounded_push(h);
-            stack.push(h);
-        }
+        // void dispatch_task(std::coroutine_handle<> h)
+        // {
+        //     // std::cout << "added dispatch task" << std::endl;
+        //     // stack.bounded_push(h);
+        //     stack.push(h);
+        // }
 
         void finalize() const
         {
@@ -94,32 +109,62 @@ namespace rg
 
         void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
         {
-            // TODO FIX WORKER. Currently they go to sleep after init if tasks take time to be emplaced
+            thread_index = index;
+            // mt19937 seems overkill. Heavier, higher quality random number
+            // std::minstd_rand and XorShift are alternatives
+            thread_local rg::XorShift rng(std::random_device{}());
+            std::uniform_int_distribution<size_t> dist(0, thread_queues.size() - 1);
             // uint64_t mask = (1ULL << index);
             // while(!done())
             // std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
             std::coroutine_handle<> h;
             while(true)
             {
-                // seperate this popping order into a function
-                if(readyQueue.try_pop(h))
+                if(thread_queues[index]->try_pop(h))
                 {
-                    // std::cout << "ready popped" << std::endl;
-                    // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
                     h.resume();
-                    // destruction of h is dealt with final suspend type or in get if something is returend
-                    // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
                     continue;
                 }
-                // TODO think about and fix race condition here. Pop happens but not marked busy
-                if(stack.try_pop(h))
+
+                // Attempt to steal from other queues
+                // while(true)
+                // {
+                //     if(i != index && thread_queues[i]->try_pop(h))
+                //     {
+                //         h.resume();
+                //         break;
+                //     }
+                // }
+
+                while(true)
                 {
-                    // std::cout << "dispatch popped" << std::endl;
-                    // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
-                    h.resume();
-                    // destruction of h is dealt with final suspend type or in get if something is returend
-                    // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                    size_t victim = dist(rng);
+                    if(victim != index && thread_queues[victim]->try_pop(h))
+                    {
+                        h.resume();
+                        break;
+                    }
                 }
+
+                // seperate this popping order into a function
+                // if(readyQueue.try_pop(h))
+                // {
+                //     // std::cout << "ready popped" << std::endl;
+                //     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                //     h.resume();
+                //     // destruction of h is dealt with final suspend type or in get if something is returend
+                //     // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                //     continue;
+                // }
+                // TODO think about and fix race condition here. Pop happens but not marked busy
+                // if(stack.try_pop(h))
+                // {
+                //     // std::cout << "dispatch popped" << std::endl;
+                //     // worker_states.fetch_or(mask, std::memory_order_acquire); // Set worker as busy
+                //     h.resume();
+                //     // destruction of h is dealt with final suspend type or in get if something is returend
+                //     // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
+                // }
                 if(stoken.stop_requested())
                 {
                     return;
@@ -134,13 +179,16 @@ namespace rg
             //  - remove from resources should be done inside handle execute
             //  - DO POOL WORK
 
-            // check for uninitialized handles in globally ordered continuation stack
+            // check for uninitialized handles in globally ordered continuation stack..
+            // Currently coroutine frames which are tasks are malloc allocated, and have been registered with resources
+            // once all resources are ready, coro handle will be pushed to ready queue
             // call uninit handle
             //  coros resume from initial suspend, start executing
-            //  if they call co_await emplace task inside the executable code,
-            //      - register resources in initial suspend----- not await transform,
+            //  if they call co_await dispatch task inside the executable code,
+            //      - register resources in dispatch task before initial suspend and await transform
+            //          - let the coro handle be. When resources are ready it will be put in the ready queue
             //          - create awaiter with suspend_never derivative if resources are
-            //          busy
+            //          busy.
             //              - create a coro with the emplace task code and add the
             //              handle to init handles with a counter which will be notified
             //              by resources it needes which are busy
@@ -154,8 +202,8 @@ namespace rg
             //          - create awaiter with suspend_always derivative if resources are
             //          free
             //              - add continuation to stack (DFS)
-            //              - execute the code of emplace_task
-            //              - remove from resources
+            //              - execute the code of dispatch_task
+            //              - remove from resources in destructor of task promise
             //              - DO POOL WORK
             //      - current continuation pauses
             //  else execute and DO POOL WORK

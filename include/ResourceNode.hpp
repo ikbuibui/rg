@@ -232,7 +232,7 @@ namespace rg
                         if(--*(it->waitCounter_p) == 0)
                         {
                             // move handle to ready tasks queue
-                            pool_p->addReadyTask(it->handle);
+                            pool_p->addTask(it->handle);
                         }
                         it++;
                     }
