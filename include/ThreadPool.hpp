@@ -1,8 +1,8 @@
 #pragma once
 
-#include "MPMCQueue.hpp"
+// #include "MPMCQueue.hpp"
+#include "dequeue.hpp"
 #include "random.hpp"
-
 // #include <boost/lockfree/stack.hpp>
 
 // #include <hwloc.h>
@@ -12,6 +12,7 @@
 #include <coroutine>
 #include <cstdint>
 #include <iostream>
+#include <optional>
 #include <random>
 #include <thread>
 #include <vector>
@@ -28,12 +29,13 @@ namespace rg
     {
         // using stack_type
         //     = boost::lockfree::stack<std::coroutine_handle<>, boost::lockfree::capacity<threadPoolStackSize>>;
-        using stack_type = rigtorp::MPMCQueue<std::coroutine_handle<>>;
+        // using stack_type = rigtorp::MPMCQueue<std::coroutine_handle<>>;
+        using stack_type = riften::Deque<std::coroutine_handle<>>;
 
 
     private:
         // bitfield where 0 is free and 1 is busy
-        std::atomic<uint64_t> worker_states{0};
+        // std::atomic<uint64_t> worker_states{0};
         thread_local static inline uint16_t thread_index;
         std::vector<std::unique_ptr<stack_type>> thread_queues;
         // stack_type stack{threadPoolStackSize};
@@ -88,7 +90,7 @@ namespace rg
 
         void addTask(std::coroutine_handle<> h)
         {
-            thread_queues[thread_index]->push(h);
+            thread_queues[thread_index]->emplace(h);
             // readyQueue.push(h);
         }
 
@@ -151,12 +153,19 @@ namespace rg
             // uint64_t mask = (1ULL << index);
             // while(!done())
             // std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
-            std::coroutine_handle<> h;
+            // std::coroutine_handle<> h;
+            std::optional<std::coroutine_handle<>> h;
             while(true)
             {
-                if(thread_queues[index]->try_pop(h))
+                // if(thread_queues[index]->try_pop(h))
+                // {
+                //     h.resume();
+                //     continue;
+                // }
+                h = thread_queues[index]->pop();
+                if(h)
                 {
-                    h.resume();
+                    h.value().resume();
                     continue;
                 }
 
@@ -171,15 +180,30 @@ namespace rg
                 // }
                 // increases latency when everyhting is done, as stealing may still be tried for a while after stop has
                 // been requested
+                // for(uint32_t attempts = 0; attempts < randomStealAttempts; ++attempts)
+                // {
+                //     size_t victim = dist(rng);
+                //     if(victim != index && thread_queues[victim]->try_pop(h))
+                //     {
+                //         h.resume();
+                //         break;
+                //     }
+                // }
+
                 for(uint32_t attempts = 0; attempts < randomStealAttempts; ++attempts)
                 {
                     size_t victim = dist(rng);
-                    if(victim != index && thread_queues[victim]->try_pop(h))
+                    if(victim != index)
                     {
-                        h.resume();
-                        break;
+                        h = thread_queues[victim]->steal();
+                        if(h)
+                        {
+                            h.value().resume();
+                            break;
+                        }
                     }
                 }
+
 
                 // seperate this popping order into a function
                 // if(readyQueue.try_pop(h))
