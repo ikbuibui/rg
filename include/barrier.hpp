@@ -40,7 +40,7 @@ namespace rg
             // {
             // }
 
-            // std::unique_lock<std::mutex> lock(h.promise().mtx);
+            // std::unique_lock lock(h.promise().mtx);
             // h.promise().cv.wait(lock, [this, h] { return h.promise().childCounter == 0; });
             // std::cout << "barrier done" << std::endl;
             return false;

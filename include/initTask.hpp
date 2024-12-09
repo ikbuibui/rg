@@ -168,7 +168,7 @@ namespace rg
             // }
             // if(coro.use_count() > 1)
             // {
-            //     std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
+            //     std::unique_lock lock(coro.promise<promise_type>().mtx);
             //     std::cout << "finalize locked. Task done : " << coro.promise<promise_type>().task_done
             //               << "child counter : " << coro.promise<promise_type>().childCounter << std::endl;
             //     coro.promise<promise_type>().cv.wait(
@@ -206,13 +206,13 @@ namespace rg
             coro.reset();
 
             // {
-            //     std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
+            //     std::unique_lock lock(coro.promise<promise_type>().mtx);
             //     coro.promise<promise_type>().cv.wait(
             //         lock,
             //         [this] { return coro.promise<promise_type>().childCounter == 0; });
             // }
             // {
-            //     std::unique_lock<std::mutex> lock(coro.promise().rootSpace->mtx);
+            //     std::unique_lock lock(coro.promise().rootSpace->mtx);
             //     // maybe better to set a done bool in the execution space rather that checking empty resList
             //     coro.promise().rootSpace->cv.wait(lock, [this] { return coro.promise().rootSpace->done(); });
             // }
@@ -226,7 +226,7 @@ namespace rg
             // while(!coro.done){} return coro.promise().result;
             if(!coro.promise<promise_type>().task_done)
             {
-                std::unique_lock<std::mutex> lock(coro.promise<promise_type>().mtx);
+                std::unique_lock lock(coro.promise<promise_type>().mtx);
                 coro.promise<promise_type>().cv.wait(lock, [this] { return coro.promise<promise_type>().task_done; });
                 // todo make this exception safe
             }

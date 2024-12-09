@@ -127,7 +127,6 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
                 co_await rg::dispatch_task(
                     [](auto ra1, auto i) -> rg::Task<int>
                     {
-                        std::cout << "started work with i: " << i << std::endl;
                         sleep(task_duration);
                         hash(i, *ra1);
                         co_return 0;
@@ -216,12 +215,8 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
 
     for(unsigned i{0}; i < n_resources; ++i)
     {
-        std::cout << "loop i = " << i << std::endl;
         auto f = [](auto res, auto i) -> rg::Task<int>
         {
-            std::cout << "copied i = " << i << " and address " << &i << std::endl;
-            std::cout << "res address " << res.get() << std::endl;
-
             if(*res != expected_hash[i])
             {
                 std::cout << "incorrect result! For resource " << i << " got ";
@@ -236,7 +231,6 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
             co_return 0;
         };
-        std::cout << "lambda copy done" << std::endl;
 
         co_await rg::dispatch_task(f, resources[i].rg_read(), i);
     }

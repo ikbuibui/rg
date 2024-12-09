@@ -32,7 +32,7 @@ namespace rg
         stack_type stack{threadPoolStackSize};
         stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
-        std::mutex mtx;
+        // std::mutex mtx;
         std::stop_source stop_source;
         std::vector<std::jthread> threads;
 
@@ -78,18 +78,18 @@ namespace rg
             stack.push(h);
         }
 
-        void finalize()
+        void finalize() const
         {
             stop_source.request_stop();
         }
 
     private:
         // check if thread pool has no more work
-        bool done()
+        bool done() const
         {
             // TODO
             // if workers are free and coro stack is empty
-            return worker_states.load(std::memory_order_acquire) == 0 && stack.empty() && readyQueue.empty();
+            return worker_states == 0 && stack.empty() && readyQueue.empty();
         }
 
         void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
