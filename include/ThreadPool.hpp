@@ -202,6 +202,7 @@ namespace rg
                             break;
                         }
                     }
+                    std::this_thread::yield();
                 }
 
 
