@@ -8,12 +8,12 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -fcoroutines")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -fcoroutines -DNDEBUG")
 
 # Find Catch2
-include(FetchContent)
-FetchContent_Declare(
-  catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG v3.7.1)
-FetchContent_MakeAvailable(catch2)
+# include(FetchContent)
+# FetchContent_Declare(
+#  catch2
+#  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+#  GIT_TAG v3.7.1)
+# FetchContent_MakeAvailable(catch2)
 
 # The following is borrowed from:
 # https://github.com/google/boringssl/blob/master/CMakeLists.txt

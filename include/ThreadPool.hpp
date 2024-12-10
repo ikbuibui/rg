@@ -5,7 +5,7 @@
 #include "random.hpp"
 // #include <boost/lockfree/stack.hpp>
 
-// #include <hwloc.h>
+#include <hwloc.h>
 
 #include <algorithm>
 #include <concepts>
@@ -45,19 +45,19 @@ namespace rg
         // std::mutex mtx;
         std::stop_source stop_source;
         std::vector<std::jthread> threads;
-        // hwloc_topology_t topology;
+        hwloc_topology_t topology;
 
     public:
         explicit ThreadPool(std::unsigned_integral auto size)
         {
-            // hwloc_topology_init(&topology);
-            // hwloc_topology_load(topology);
+            hwloc_topology_init(&topology);
+            hwloc_topology_load(topology);
 
-            // int num_cores = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_CORE);
-            // if(num_cores < static_cast<int>(size))
-            // {
-            //     throw std::runtime_error("Insufficient cores for thread pool size.");
-            // }
+            int num_cores = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_CORE);
+            if(num_cores < static_cast<int>(size))
+            {
+                throw std::runtime_error("Insufficient cores for thread pool size.");
+            }
 
             // set thread queue p for main thread
             thread_queue_p = &master_queue;
@@ -72,7 +72,18 @@ namespace rg
             std::generate_n(
                 std::back_inserter(threads),
                 size,
-                [this, &i] { return std::jthread(&ThreadPool::worker, this, i++, stop_source.get_token()); });
+                [this, &i, num_cores]
+                {
+                    return std::jthread(
+                        [this, idx = i++, num_cores](std::stop_token stoken)
+                        {
+                            // Pin thread to core
+                            ThreadPool::pinThreadToCore(idx % num_cores);
+                            ThreadPool::worker(idx, stoken);
+                        });
+                }
+
+            );
         }
 
         ~ThreadPool()
@@ -94,7 +105,6 @@ namespace rg
         void addTask(std::coroutine_handle<> h)
         {
             thread_queue_p->emplace(h);
-            // readyQueue.push(h);
         }
 
         // void addReadyTask(std::coroutine_handle<> h)
@@ -126,23 +136,23 @@ namespace rg
         //     return worker_states == 0 && stack.empty() && readyQueue.empty();
         // }
 
-        // void pinThreadToCore(int core_index)
-        // {
-        //     hwloc_obj_t core = hwloc_get_obj_by_type(topology, HWLOC_OBJ_CORE, core_index);
-        //     if(!core)
-        //     {
-        //         throw std::runtime_error("Failed to get core for pinning.");
-        //     }
+        void pinThreadToCore(int core_index)
+        {
+            hwloc_obj_t core = hwloc_get_obj_by_type(topology, HWLOC_OBJ_CORE, core_index);
+            if(!core)
+            {
+                throw std::runtime_error("Failed to get core for pinning.");
+            }
 
-        //     hwloc_cpuset_t cpuset = hwloc_bitmap_dup(core->cpuset);
-        //     hwloc_bitmap_singlify(cpuset); // Restrict to a single core
-        //     if(hwloc_set_cpubind(topology, cpuset, HWLOC_CPUBIND_THREAD) == -1)
-        //     {
-        //         hwloc_bitmap_free(cpuset);
-        //         throw std::runtime_error("Failed to bind thread to core.");
-        //     }
-        //     hwloc_bitmap_free(cpuset);
-        // }
+            hwloc_cpuset_t cpuset = hwloc_bitmap_dup(core->cpuset);
+            hwloc_bitmap_singlify(cpuset); // Restrict to a single core
+            if(hwloc_set_cpubind(topology, cpuset, HWLOC_CPUBIND_THREAD) == -1)
+            {
+                hwloc_bitmap_free(cpuset);
+                throw std::runtime_error("Failed to bind thread to core.");
+            }
+            hwloc_bitmap_free(cpuset);
+        }
 
         void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
         {
@@ -206,14 +216,17 @@ namespace rg
                             break;
                         }
                     }
+                    else
+                    {
+                        h = master_queue.steal();
+                        if(h)
+                        {
+                            h.value().resume();
+                        }
+                    }
                     // std::this_thread::yield();
                 }
 
-                h = master_queue.steal();
-                if(h)
-                {
-                    h.value().resume();
-                }
 
                 // seperate this popping order into a function
                 // if(readyQueue.try_pop(h))

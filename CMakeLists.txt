@@ -34,7 +34,41 @@ target_compile_options(
             $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 
 find_package(Threads REQUIRED)
+
+# Find HwLoc
+find_path(
+  HWLOC_INCLUDE_DIR
+  NAMES hwloc.h
+  PATHS /opt/local
+        /usr/local
+        /usr
+        ENV
+        "PROGRAMFILES(X86)"
+        ENV
+        "HWLOC_ROOT"
+  PATH_SUFFIXES include)
+
+find_library(
+  HWLOC
+  NAMES libhwloc.lib hwloc
+  PATHS ENV "HWLOC_ROOT"
+  PATH_SUFFIXES lib)
+
+if(HWLOC STREQUAL "HWLOC-NOTFOUND" OR ${HWLOC_INCLUDE_DIR} STREQUAL
+                                      "HWLOC_INCLUDE_DIR-NOTFOUND")
+  message(
+    FATAL_ERROR
+      "hwloc NOT found: use `-DHWLOC_ENABLE=OFF` to build without hwloc support"
+  )
+
+else()
+  message(STATUS "Found hwloc")
+endif()
+
 target_link_libraries(rg INTERFACE Threads::Threads)
+target_link_libraries(rg INTERFACE ${HWLOC})
+
+target_include_directories(rg INTERFACE ${HWLOC_INCLUDE_DIR})
 
 # Examples & Tests
 
