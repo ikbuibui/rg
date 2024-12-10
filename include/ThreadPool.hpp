@@ -36,8 +36,9 @@ namespace rg
     private:
         // bitfield where 0 is free and 1 is busy
         // std::atomic<uint64_t> worker_states{0};
-        thread_local static inline uint16_t thread_index;
+        thread_local static inline stack_type* thread_queue_p;
         std::vector<std::unique_ptr<stack_type>> thread_queues;
+        stack_type master_queue{threadPoolStackSize};
         // stack_type stack{threadPoolStackSize};
         // stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
@@ -58,6 +59,8 @@ namespace rg
             //     throw std::runtime_error("Insufficient cores for thread pool size.");
             // }
 
+            // set thread queue p for main thread
+            thread_queue_p = &master_queue;
             thread_queues.reserve(size);
             std::generate_n(
                 std::back_inserter(thread_queues),
@@ -90,7 +93,7 @@ namespace rg
 
         void addTask(std::coroutine_handle<> h)
         {
-            thread_queues[thread_index]->emplace(h);
+            thread_queue_p->emplace(h);
             // readyQueue.push(h);
         }
 
@@ -143,10 +146,11 @@ namespace rg
 
         void worker([[maybe_unused]] uint16_t index, std::stop_token stoken)
         {
-            thread_index = index;
+            thread_queue_p = thread_queues[index].get();
 
             // mt19937 seems overkill. Heavier, higher quality random number
             // std::minstd_rand and XorShift are alternatives
+            // https://github.com/ConorWilliams/Threadpool/blob/main/include/riften/xoroshiro128starstar.hpp
             thread_local rg::XorShift rng(std::random_device{}());
             std::uniform_int_distribution<uint32_t> dist(0, thread_queues.size() - 1);
 
@@ -202,9 +206,14 @@ namespace rg
                             break;
                         }
                     }
-                    std::this_thread::yield();
+                    // std::this_thread::yield();
                 }
 
+                h = master_queue.steal();
+                if(h)
+                {
+                    h.value().resume();
+                }
 
                 // seperate this popping order into a function
                 // if(readyQueue.try_pop(h))
