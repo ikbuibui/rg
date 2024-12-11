@@ -437,6 +437,176 @@ namespace rg
         SharedCoroutineHandle coro;
     };
 
+    template<>
+    struct Task<void>
+    {
+        template<typename U>
+        friend struct InitTask;
+
+        template<typename U>
+        friend struct DispatchAwaiter;
+
+        template<typename Callable, typename... ResourceAccess>
+        friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
+
+        struct promise_type
+        {
+            // TODO think should I hold this in task
+
+            // initialized in await_transform of parent coroutine
+            ThreadPool* pool_p{};
+            // needs to be atomic. multiple threads will change this if deregistering from resources together
+            // start from a large offset, add to it when registering
+            // decrement the offset when registration is done to avoid races which start exec while registering
+            // needs to be atomic. multiple threads will change this if deregistering from resources together
+            std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
+            // counts number of children alive
+            // used for barrier
+            std::atomic<uint32_t> childCounter{0u};
+            std::atomic<uint32_t>* parentChildCounter{nullptr};
+
+            // hold parent to keep it alive
+            SharedCoroutineHandle parent;
+
+            // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
+            SharedCoroutineHandle self;
+
+            // mutex to synchronize final suspend and .get() waiting which adds a dependency
+            // used for barrier
+            std::mutex mutex;
+            // used for barrier
+            std::condition_variable cv;
+
+            // Task space for the children of this task. Passed in its ptr during await transform
+            // std::shared_ptr<ExecutionSpace> space = std::make_shared<ExecutionSpace>();
+
+            // hold res in vector to deregister later
+            std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
+
+            // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
+
+            // template<typename... Args>
+            // promise_type(Args...)
+            //     : self{SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this))}
+            // {
+            // }
+            ~promise_type()
+            { // deregister from resources
+                std::ranges::for_each(
+                    resourceNodes,
+                    [this](auto const& resNode)
+                    { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
+
+                // decrement child task counter of the parent
+                if(--*parentChildCounter == 0)
+                {
+                    // if counter hits zero, notify parent cv
+                    // handle.promise().cv.notify_all();
+                }
+            }
+
+            Task get_return_object()
+            {
+                self = SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this));
+                return Task{self};
+            }
+
+            // required to suspend as handle coroutine is created in dispactch task
+            // waiter suspend. awaiter suspended for n resumes
+            std::suspend_always initial_suspend() noexcept
+            {
+                return {};
+            }
+
+            // do suspend_if, if returns void, suspend never (which will destroy the coroutine), if returns a value,
+            // suspend_always and destroy in get/task space
+            // Think about task space being done for deletion and suspension
+            // if this doesnt suspend, then done will never return true
+            // do suspend always? suspend if task space is not empty
+            // if it returns something - try destroy after .get() or in the destructor of the handle object
+            // it it returns nothing, try here
+            // destroy cannot happen before final suspend
+            DeleteAwaiter final_suspend() noexcept
+            {
+                // we are done, no need to hold self anymore.
+                // self.reset();
+                // This is safe because at final suspend point no other threads will concurrently add siblings
+                // all siblings have been added already
+                // if(self.use_count() == 1)
+                // {
+                //     std::cout << "in if " << std::endl;
+                // }
+                // else
+                // {
+                //     std::cout << "in else " << std::endl;
+                //     assert(self.use_count() != 0);
+                //     // safe because this will not
+                //     self.reset();
+                // }
+                return {std::move(self)};
+            }
+
+            void unhandled_exception()
+
+            {
+                std::terminate();
+            }
+
+            void return_void() {};
+
+            // TODO contrain args to resource concept
+            // TODO PASS BY REF? also in init
+            // Called by children of this task
+            // TODO think abour using a concept
+            template<typename U>
+            auto await_transform(DispatchAwaiter<U> awaiter)
+            {
+                // Init
+                auto& awaiter_promise
+                    = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
+
+                // pass in the parent task space
+                // coro.promise().space->parentSpace = space;
+                // pass in the pool ptr
+                awaiter_promise.pool_p = pool_p;
+
+                // coro.promise().space->pool_p = pool_p;
+                // coro.promise().space->ownerHandle = coro.getHandle();
+                awaiter_promise.parent = self;
+                awaiter_promise.parentChildCounter = &childCounter;
+                ++childCounter;
+
+                // Init over
+
+                // TODO added to the resources, and now peopple will try to remove old stuff and run this.
+                // But I dont want to run this
+
+                // resources Ready based on reutrn value of register to resources or value of waitCounter
+
+                // if(resourcesReady)
+                //   return awaiter that suspends, adds continuation to stack, and executes task
+                // elseif resources not ready
+                //   task has been initialized with wait counter, waits for child notification to add to ready queue
+                //   return awaiter that suspend never (executes the continuation)
+                return awaiter;
+            }
+
+            // TODO PASS BY REF? also in init
+            template<typename NonDispatchAwaiter>
+            auto await_transform(NonDispatchAwaiter aw)
+            {
+                return aw;
+            }
+        };
+
+        explicit Task(SharedCoroutineHandle const& h) : coro(h)
+        {
+        }
+
+    private:
+        SharedCoroutineHandle coro;
+    };
+
     // is called with co_await and it thus gives access to awaitable to the calling coro
     // awaitable should store a future and its promise should be set when the coroutine handle is finished
     // executing when is the awaitable destroyed, where to hold the memory of the promise template<typename T>

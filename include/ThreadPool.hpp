@@ -2,6 +2,7 @@
 
 // #include "MPMCQueue.hpp"
 #include "dequeue.hpp"
+#include "hwloc_ctx.hpp"
 #include "random.hpp"
 // #include <boost/lockfree/stack.hpp>
 
@@ -45,14 +46,11 @@ namespace rg
         // std::mutex mtx;
         std::stop_source stop_source;
         std::vector<std::jthread> threads;
-        hwloc_topology_t topology;
+        hwloc_topology_t const& topology;
 
     public:
-        explicit ThreadPool(std::unsigned_integral auto size)
+        explicit ThreadPool(std::unsigned_integral auto size) : topology(HwlocTopology::getInstance())
         {
-            hwloc_topology_init(&topology);
-            hwloc_topology_load(topology);
-
             int num_cores = hwloc_get_nbobjs_by_type(topology, HWLOC_OBJ_CORE);
             if(num_cores < static_cast<int>(size))
             {
