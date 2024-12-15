@@ -12,22 +12,19 @@
 namespace rg
 {
     // awaiter to place its own continuation to the pool stack and return to caller
-    template<typename promise_type>
     struct DetachToPoolAwaiter
     {
-        std::coroutine_handle<promise_type> h;
-
-        // doesnt suspend the coroutine call
         bool await_ready() noexcept
         {
             return false;
         };
 
+        template<typename promise_type>
         void await_suspend(std::coroutine_handle<promise_type> h) noexcept
         {
             // add me to stack
             // and return to main
-            h.promise().pool_p->emplace_init_frame(h);
+            h.promise().pool_p->addTask(h);
         };
 
         void await_resume() noexcept {};
@@ -89,7 +86,7 @@ namespace rg
                 return InitTask{self};
             }
 
-            std::suspend_never initial_suspend() noexcept
+            DetachToPoolAwaiter initial_suspend() noexcept
             {
                 return {};
             }
@@ -185,12 +182,12 @@ namespace rg
 
             while(coro.use_count() > 1)
             {
-                if(backoff_time < max_backoff_time)
-                {
-                    std::this_thread::sleep_for(backoff_time);
-                    backoff_time *= 2;
-                }
-                else
+                // if(backoff_time < max_backoff_time)
+                // {
+                //     std::this_thread::sleep_for(backoff_time);
+                //     backoff_time *= 2;
+                // }
+                // else
                 {
                     std::this_thread::yield();
                 }
