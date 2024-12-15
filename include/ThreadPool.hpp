@@ -1,18 +1,18 @@
 #pragma once
 
 // #include "MPMCQueue.hpp"
+#include "barrier.hpp"
 #include "dequeue.hpp"
 #include "hwloc_ctx.hpp"
 #include "random.hpp"
-// #include <boost/lockfree/stack.hpp>
 
+#include <boost/lockfree/stack.hpp>
 #include <hwloc.h>
 
 #include <algorithm>
 #include <concepts>
 #include <coroutine>
 #include <cstdint>
-#include <iostream>
 #include <optional>
 #include <random>
 #include <thread>
@@ -32,7 +32,7 @@ namespace rg
         //     = boost::lockfree::stack<std::coroutine_handle<>, boost::lockfree::capacity<threadPoolStackSize>>;
         // using stack_type = rigtorp::MPMCQueue<std::coroutine_handle<>>;
         using stack_type = riften::Deque<std::coroutine_handle<>>;
-
+        friend struct BarrierAwaiter;
 
     private:
         // bitfield where 0 is free and 1 is busy
@@ -40,6 +40,7 @@ namespace rg
         thread_local static inline stack_type* thread_queue_p;
         std::vector<std::unique_ptr<stack_type>> thread_queues;
         stack_type master_queue{threadPoolStackSize};
+        BarrierQueue barrier_queue{};
         // stack_type stack{threadPoolStackSize};
         // stack_type readyQueue{threadPoolStackSize};
         // std::condition_variable cv;
@@ -210,7 +211,6 @@ namespace rg
                         h = thread_queues[victim]->steal();
                         if(h)
                         {
-                            h.value().resume();
                             break;
                         }
                     }
@@ -219,13 +219,20 @@ namespace rg
                         h = master_queue.steal();
                         if(h)
                         {
-                            h.value().resume();
+                            break;
                         }
                     }
                     // std::this_thread::yield();
                 }
 
+                if(h)
+                {
+                    h.value().resume();
+                    continue;
+                }
 
+                // check barrier queue resumption
+                barrier_queue.process_and_extract(this);
                 // seperate this popping order into a function
                 // if(readyQueue.try_pop(h))
                 // {
