@@ -1,5 +1,7 @@
 #pragma once
 
+#include "FinalDelete.hpp"
+#include "SharedCoroutineHandle.hpp"
 #include "ThreadPool.hpp"
 #include "dispatchTask.hpp"
 
@@ -91,7 +93,7 @@ namespace rg
                 return {};
             }
 
-            DeleteAwaiter final_suspend() noexcept
+            FinalDelete final_suspend() noexcept
             {
                 // std::cout << "final suspend called" << std::endl;
                 task_done = true;

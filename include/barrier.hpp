@@ -13,7 +13,7 @@ namespace rg
         bool await_ready() noexcept
         {
             return false;
-        };
+        }
 
         template<typename promise_type>
         bool await_suspend(std::coroutine_handle<promise_type> h) noexcept
@@ -46,9 +46,11 @@ namespace rg
             // h.promise().cv.wait(lock, [this, h] { return h.promise().childCounter == 0; });
             // std::cout << "barrier done" << std::endl;
             // return false;
-        };
+        }
 
-        void await_resume() noexcept {};
+        void await_resume() noexcept
+        {
+        }
     };
 
     struct BarrierQueue

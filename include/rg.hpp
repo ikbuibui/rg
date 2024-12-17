@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Task.hpp"
 #include "ThreadPool.hpp"
 #include "barrier.hpp"
 #include "dispatchTask.hpp"
