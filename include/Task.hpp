@@ -28,7 +28,9 @@ namespace rg
 
         bool await_ready() const noexcept
         {
-            return coro.promise<AwaitedPromise>().task_done;
+            // return coro.promise<AwaitedPromise>().task_done;
+            // if it is 0, task is done, continue, if 1, then pause task
+            return !coro.promise<AwaitedPromise>().workingState;
         }
 
         // has a lock to prevent final suspend of coro being done when await suspend is being called
@@ -41,17 +43,22 @@ namespace rg
             // Moved outside to make lock small
 
             // We can move this lock into setHandle
-            std::lock_guard lock(coro.promise<AwaitedPromise>().mutex);
+            // std::lock_guard lock(coro.promise<AwaitedPromise>().mutex);
             // check again after lock is taken in case coro finished between await ready and locking in await suspend
-            if(!coro.promise<AwaitedPromise>().task_done)
-            {
-                // Safely set h as the getWaiterHandle for coro
-                coro.promise<AwaitedPromise>().getWaiterHandle = h;
+            // if(!coro.promise<AwaitedPromise>().task_done)
+            // {
+            //     // Safely set h as the getWaiterHandle for coro
+            //     coro.promise<AwaitedPromise>().getWaiterHandle = h;
 
-                // Suspend the coroutine
-                return true;
-            }
-            return false;
+            //     // Suspend the coroutine
+            //     return true;
+            // }
+            // return false;
+            coro.promise<AwaitedPromise>().getWaiterHandle = h;
+            uint32_t expectedState = 1;
+            coro.promise<AwaitedPromise>().workingState.compare_exchange_strong(expectedState, 2);
+            // return true to suspend if expected state is 1
+            return expectedState != 0;
         }
 
         // will only be called after the task is done
@@ -124,6 +131,7 @@ namespace rg
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             bool task_done = false;
+            std::atomic<uint32_t> workingState = 1;
             // counts number of children alive
             // used for barrier
             std::atomic<uint32_t> childCounter{0u};
@@ -137,12 +145,6 @@ namespace rg
 
             // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
             SharedCoroutineHandle self;
-
-            // mutex to synchronize final suspend and .get() waiting which adds a dependency
-            // used for barrier
-            std::mutex mutex;
-            // used for barrier
-            std::condition_variable cv;
 
             // Task space for the children of this task. Passed in its ptr during await transform
             // std::shared_ptr<ExecutionSpace> space = std::make_shared<ExecutionSpace>();
@@ -196,10 +198,13 @@ namespace rg
             FinalDelete final_suspend() noexcept
             {
                 { // Lock for final_suspend, get_awaiter, and execSpace remove. They cannot happen together
-                    std::lock_guard lock(mutex);
+                    // std::lock_guard lock(mutex);
+                    uint32_t expectedState = 1;
+                    workingState.compare_exchange_strong(expectedState, 0);
 
+                    // TODO remove task done
                     task_done = true;
-                    if(getWaiterHandle) // get has been called already
+                    if(expectedState == 2) // get has been pushed handle already
                     {
                         // push getWaiterHandle to ready tasks;
                         pool_p->addTask(getWaiterHandle);
@@ -349,12 +354,6 @@ namespace rg
 
             // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
             SharedCoroutineHandle self;
-
-            // mutex to synchronize final suspend and .get() waiting which adds a dependency
-            // used for barrier
-            std::mutex mutex;
-            // used for barrier
-            std::condition_variable cv;
 
             // Task space for the children of this task. Passed in its ptr during await transform
             // std::shared_ptr<ExecutionSpace> space = std::make_shared<ExecutionSpace>();
