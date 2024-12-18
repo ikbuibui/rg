@@ -6,7 +6,7 @@
 #include "hwloc_ctx.hpp"
 #include "random.hpp"
 
-#include <boost/lockfree/stack.hpp>
+// #include <boost/lockfree/stack.hpp>
 #include <hwloc.h>
 
 #include <algorithm>
