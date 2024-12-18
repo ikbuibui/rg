@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cmath>
 #include <coroutine>
+#include <cstdint>
 #include <utility>
 
 namespace rg
@@ -104,12 +105,13 @@ namespace rg
         // TODO Think about copies, references and lifetimes
         // std::cout << "Counter for thread " << std::this_thread::get_id() << " is " << counter++ << std::endl;
 
-
+        uint16_t resource_counter = 0;
         // Helper lambda to process each accessHandle
-        auto process_handle = [](auto&& handle) -> decltype(auto)
+        auto process_handle = [&resource_counter](auto&& handle) -> decltype(auto)
         {
             if constexpr(HasAccessType<std::decay_t<decltype(handle)>>)
             {
+                resource_counter++;
                 return handle.get(); // Call get() for types with access type
             }
             else
@@ -122,14 +124,15 @@ namespace rg
         auto handle = std::invoke(
             std::forward<Callable>(callable),
             process_handle(std::forward<ResourceAccess>(accessHandles))...);
-        // , std::forward<typename ResourceAccess::value_type>(accessHandles.get())...);
 
+        // can access coro because it this function is a friend
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
         auto& resourceNodes = handlePromise.resourceNodes;
-        // can access coro because it this function is a friend
-        // TODO fix! this reserves too large a space, not all accessHandles are resources
-        resourceNodes.reserve(sizeof...(accessHandles));
+        // this reserves too large a space, not all accessHandles are resources
+        // resourceNodes.reserve(sizeof...(accessHandles));
+        resourceNodes.reserve(resource_counter);
 
+        // Register task to resources
         // Fold expression only for handles satisfying HasAccessType
         (...,
          (
@@ -146,20 +149,9 @@ namespace rg
                  }
              }(std::forward<ResourceAccess>(accessHandles))));
 
-        // TODO make sure all resources are registered before someone deregistering sends this to readyQueue
-        // for_each_access_type(
-        //     [&handlePromise, &resourceNodes, &handle](auto const& accessHandle)
-        //     {
-        //         resourceNodes.push_back(accessHandle.getUserQueue());
-
-        //         accessHandle.getUserQueue()->add_task(
-        //             {handle.coro.get_coroutine_handle(),
-        //              typename std::decay_t<decltype(accessHandle)>::access_type{},
-        //              &handlePromise.waitCounter});
-        //     },
-        //     accessHandles...);
-
-
+        // task is ready to be eaten after fetch sub.
+        // This is to make sure all resources are registered before someone deregistering sends this to readyQueue
+        // If it returns INVALID_WAIT_STATE, then resource are ready and we are responsible to consume it
         auto wc = handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE);
         bool resReady = (wc == INVALID_WAIT_STATE);
 
