@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.13)
 
 project(
   "rg"
@@ -60,13 +60,17 @@ if(HWLOC STREQUAL "HWLOC-NOTFOUND" OR ${HWLOC_INCLUDE_DIR} STREQUAL
     FATAL_ERROR
       "hwloc NOT found: use `-DHWLOC_ENABLE=OFF` to build without hwloc support"
   )
-
 else()
   message(STATUS "Found hwloc")
 endif()
+# Use get_filename_component to extract the directory from the HWLOC library
+# path
+get_filename_component(HWLOC_LIBRARY_DIR ${HWLOC} DIRECTORY)
 
-target_link_libraries(rg INTERFACE Threads::Threads)
-target_link_libraries(rg INTERFACE ${HWLOC})
+# Add the library directory to the link directories
+target_link_directories(rg INTERFACE ${HWLOC_LIBRARY_DIR})
+
+target_link_libraries(rg INTERFACE Threads::Threads ${HWLOC})
 
 target_include_directories(rg INTERFACE ${HWLOC_INCLUDE_DIR})
 
