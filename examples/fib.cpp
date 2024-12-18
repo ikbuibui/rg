@@ -16,13 +16,13 @@ inline auto fib(size_t n) -> rg::Task<size_t>
 
     auto a = co_await rg::dispatch_task(fib, n - 1);
     auto b = co_await rg::dispatch_task(fib, n - 2);
-
-    co_return co_await a.get() + co_await b.get();
+    auto b_result = co_await b.get();
+    co_return co_await a.get() + b_result;
 };
 
 auto main_wrapper(rg::ThreadPool* ptr, size_t n) -> rg::InitTask<int>
 {
-    co_await rg::dispatch_task(fib, 40);
+    co_await rg::dispatch_task(fib, 30);
     co_await rg::BarrierAwaiter{};
     std::printf("results:\n");
     auto startTime = std::chrono::high_resolution_clock::now();
