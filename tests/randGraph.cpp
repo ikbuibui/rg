@@ -1,10 +1,6 @@
-#include "ThreadPool.hpp"
-#include "barrier.hpp"
-#include "dispatchTask.hpp"
-#include "init.hpp"
-#include "initTask.hpp"
-#include "resources.hpp"
 #include "sha256.c"
+
+#include <rg.hpp>
 
 #include <algorithm>
 #include <array>

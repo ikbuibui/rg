@@ -51,14 +51,14 @@ auto nqueens(int xMax, std::array<char, N> buf) -> rg::Task<int>
     // Spawn up to N tasks (but possibly less, if queens_ok fails)
 
     std::array<rg::Task<int>, N> parts;
-    for(auto t : tasks)
+    for([[maybe_unused]] auto t : tasks)
     {
         parts[taskCount] = co_await rg::dispatch_task(nqueens<N>, xMax + 1, buf);
         ++taskCount;
     }
 
     int ret = 0;
-    for(size_t i = 0; i < taskCount; ++i)
+    for(int i = 0; i < taskCount; ++i)
     {
         ret += co_await parts[i].get();
     }
