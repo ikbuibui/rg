@@ -62,7 +62,8 @@ namespace rg
 
             SharedCoroutineHandle self;
 
-            std::atomic<uint32_t> childCounter = 0;
+            // TODO think if i should init this to 1
+            std::atomic<size_t> handleCounter{0u};
 
             // Task space for the children of this task. Passed in its ptr during await transform
             // std::shared_ptr<ExecutionSpace> rootSpace = std::make_shared<ExecutionSpace>();
@@ -133,8 +134,6 @@ namespace rg
                 // coro.promise().space->pool_p = pool_p;
                 // coro.promise().space->ownerHandle = coro.getHandle();
                 awaiter_promise.parent = self;
-                awaiter_promise.parentChildCounter = &childCounter;
-                ++childCounter;
 
                 // Init over
 
@@ -153,8 +152,41 @@ namespace rg
             }
         };
 
-        InitTask(SharedCoroutineHandle const& h) : coro{h}
+        InitTask(SharedCoroutineHandle const& h) noexcept : coro{h}
         {
+            coro.promise<promise_type>().handleCounter++;
+        }
+
+        InitTask(InitTask const& x) noexcept : coro{x.coro}
+        {
+            coro.promise<promise_type>().handleCounter++;
+        }
+
+        InitTask(InitTask&& x) noexcept : coro{std::move(x.coro)}
+        {
+            x.isMoved = true;
+        }
+
+        InitTask& operator=(InitTask const& x) noexcept
+        {
+            coro = x.coro;
+            coro.promise<promise_type>().handleCounter++;
+            return *this;
+        }
+
+        InitTask& operator=(InitTask&& x) noexcept
+        {
+            coro = std::move(x.coro);
+            x.isMoved = true;
+            return *this;
+        }
+
+        ~InitTask() noexcept
+        {
+            if(!isMoved && coro)
+            {
+                coro.promise<promise_type>().handleCounter--;
+            }
         }
 
         // can this be task destructor
@@ -179,10 +211,11 @@ namespace rg
             // }
             // std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
             //
-            auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
-            auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
+            // auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
+            // auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
 
-            while(coro.use_count() > 1)
+            // TODO fix! wont work if the user copies the init task handle
+            while(coro.use_count() > coro.promise<promise_type>().handleCounter)
             {
                 // if(backoff_time < max_backoff_time)
                 // {
@@ -200,9 +233,9 @@ namespace rg
             //     std::this_thread::sleep_for(std::chrono::seconds(3));
             //     // std::cout << "use count : " << coro.use_count() << std::endl;
             // }
-            // std::cout << "finalize use count hit 1 " << std::endl;
-
+            coro.promise<promise_type>().handleCounter--;
             coro.reset();
+            isMoved = true;
 
             // {
             //     std::unique_lock lock(coro.promise<promise_type>().mtx);
@@ -238,6 +271,9 @@ namespace rg
         }
 
         SharedCoroutineHandle coro;
+
+    private:
+        bool isMoved = false;
     };
 
     // TODO also make initTask and orchestrate for void

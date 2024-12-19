@@ -7,8 +7,8 @@
 #include "dispatchTask.hpp"
 
 #include <atomic>
-#include <condition_variable>
 #include <coroutine>
+#include <cstddef>
 #include <optional>
 
 namespace rg
@@ -132,10 +132,9 @@ namespace rg
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             bool task_done = false;
             std::atomic<uint32_t> workingState = 1;
-            // counts number of children alive
-            // used for barrier
-            std::atomic<uint32_t> childCounter{0u};
-            std::atomic<uint32_t>* parentChildCounter{nullptr};
+            // TODO think if i should init this to 1
+            std::atomic<size_t> handleCounter{0u};
+
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
             std::coroutine_handle<> getWaiterHandle{nullptr};
@@ -165,13 +164,6 @@ namespace rg
                     resourceNodes,
                     [this](auto const& resNode)
                     { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
-
-                // decrement child task counter of the parent
-                if(--*parentChildCounter == 0)
-                {
-                    // if counter hits zero, notify parent cv
-                    // handle.promise().cv.notify_all();
-                }
             }
 
             Task get_return_object()
@@ -267,8 +259,6 @@ namespace rg
                 // coro.promise().space->pool_p = pool_p;
                 // coro.promise().space->ownerHandle = coro.getHandle();
                 awaiter_promise.parent = self;
-                awaiter_promise.parentChildCounter = &childCounter;
-                ++childCounter;
 
                 // Init over
 
@@ -293,12 +283,45 @@ namespace rg
             }
         };
 
-        explicit Task(SharedCoroutineHandle const& h) : coro(h)
+        explicit Task(SharedCoroutineHandle const& h) noexcept : coro(h)
+        {
+            coro.promise<promise_type>().handleCounter++;
+        }
+
+        Task() noexcept : coro()
         {
         }
 
-        Task() : coro()
+        Task(Task const& x) noexcept : coro{x.coro}
         {
+            coro.promise<promise_type>().handleCounter++;
+        }
+
+        Task(Task&& x) noexcept : coro{std::move(x.coro)}
+        {
+            x.isMoved = true;
+        }
+
+        Task& operator=(Task const& x) noexcept
+        {
+            coro = x.coro;
+            coro.promise<promise_type>().handleCounter++;
+            return *this;
+        }
+
+        Task& operator=(Task&& x) noexcept
+        {
+            coro = std::move(x.coro);
+            x.isMoved = true;
+            return *this;
+        }
+
+        ~Task() noexcept
+        {
+            if(!isMoved && coro)
+            {
+                coro.promise<promise_type>().handleCounter--;
+            }
         }
 
         // TODO put some of the on get destruction logic in destructor as well. If destroying the object without
@@ -316,6 +339,7 @@ namespace rg
 
     private:
         SharedCoroutineHandle coro;
+        bool isMoved = false;
     };
 
     template<>
@@ -344,10 +368,9 @@ namespace rg
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
-            // counts number of children alive
-            // used for barrier
-            std::atomic<uint32_t> childCounter{0u};
-            std::atomic<uint32_t>* parentChildCounter{nullptr};
+
+            // TODO think if i should init this to 1
+            std::atomic<size_t> handleCounter{0u};
 
             // hold parent to keep it alive
             SharedCoroutineHandle parent;
@@ -374,13 +397,6 @@ namespace rg
                     resourceNodes,
                     [this](auto const& resNode)
                     { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
-
-                // decrement child task counter of the parent
-                if(--*parentChildCounter == 0)
-                {
-                    // if counter hits zero, notify parent cv
-                    // handle.promise().cv.notify_all();
-                }
             }
 
             Task get_return_object()
@@ -451,8 +467,6 @@ namespace rg
                 // coro.promise().space->pool_p = pool_p;
                 // coro.promise().space->ownerHandle = coro.getHandle();
                 awaiter_promise.parent = self;
-                awaiter_promise.parentChildCounter = &childCounter;
-                ++childCounter;
 
                 // Init over
 
@@ -477,15 +491,50 @@ namespace rg
             }
         };
 
-        explicit Task(SharedCoroutineHandle const& h) : coro(h)
+        explicit Task(SharedCoroutineHandle const& h) noexcept : coro(h)
+        {
+            coro.promise<promise_type>().handleCounter++;
+        }
+
+        Task() noexcept : coro()
         {
         }
 
-        Task() : coro()
+        Task(Task const& x) noexcept : coro{x.coro}
         {
+            coro.promise<promise_type>().handleCounter++;
         }
+
+        Task(Task&& x) noexcept : coro{std::move(x.coro)}
+        {
+            x.isMoved = true;
+        }
+
+        Task& operator=(Task const& x) noexcept
+        {
+            coro = x.coro;
+            coro.promise<promise_type>().handleCounter++;
+            return *this;
+        }
+
+        Task& operator=(Task&& x) noexcept
+        {
+            coro = std::move(x.coro);
+            x.isMoved = true;
+            return *this;
+        }
+
+        ~Task() noexcept
+        {
+            if(!isMoved && coro)
+            {
+                coro.promise<promise_type>().handleCounter--;
+            }
+        }
+
 
     private:
         SharedCoroutineHandle coro;
+        bool isMoved = false;
     };
 } // namespace rg

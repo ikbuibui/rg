@@ -1,7 +1,11 @@
 #pragma once
 
+#include "SharedCoroutineHandle.hpp"
+
 #include <atomic>
 #include <coroutine>
+#include <cstddef>
+#include <memory>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -20,32 +24,9 @@ namespace rg
         {
             // std::cout << "in barrier" << std::endl;
 
-            h.promise().pool_p->barrier_queue.emplace_back(h, &h.promise().childCounter);
+            h.promise().pool_p->barrier_queue.emplace_back(h.promise().self, h.promise().handleCounter);
 
             return true;
-            // auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
-            // auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
-
-            // while(h.promise().childCounter.load(std::memory_order_acquire) != 0)
-            // {
-            //     if(backoff_time < max_backoff_time)
-            //     {
-            //         std::this_thread::sleep_for(backoff_time);
-            //         backoff_time *= 2;
-            //     }
-            //     else
-            //     {
-            //         std::this_thread::yield();
-            //     }
-            // }
-            // while(h.promise().childCounter != 0)
-            // {
-            // }
-
-            // std::unique_lock lock(h.promise().mtx);
-            // h.promise().cv.wait(lock, [this, h] { return h.promise().childCounter == 0; });
-            // std::cout << "barrier done" << std::endl;
-            // return false;
         }
 
         void await_resume() noexcept
@@ -55,9 +36,9 @@ namespace rg
 
     struct BarrierQueue
     {
-        using barrier_pair = std::pair<std::coroutine_handle<>, std::atomic<uint32_t>*>;
+        using barrier_tuple = std::tuple<std::coroutine_handle<>, WeakCoroutineHandle, std::atomic<size_t>*>;
 
-        std::vector<barrier_pair> queue;
+        std::vector<barrier_tuple> queue;
         mutable std::mutex mtx;
 
         explicit BarrierQueue(std::size_t reserve_size = 4)
@@ -65,10 +46,10 @@ namespace rg
             queue.reserve(reserve_size);
         }
 
-        void emplace_back(std::coroutine_handle<> handle, std::atomic<uint32_t>* atomic_ptr)
+        void emplace_back(SharedCoroutineHandle const& sharedHandle, std::atomic<size_t>& atomic_ptr)
         {
             std::lock_guard<std::mutex> lock(mtx);
-            queue.emplace_back(handle, atomic_ptr);
+            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle, &atomic_ptr);
         }
 
         // Iterate, remove elements with zero atomic value, and return their coroutine handles
@@ -78,7 +59,9 @@ namespace rg
             std::lock_guard<std::mutex> lock(mtx);
 
             // check if the barrier is ready
-            auto is_ready = [](barrier_pair const& pair) { return pair.second->load() == 0; };
+            // use count of 1, since parent task holds self. All children are done if use count - num handles = 1
+            auto is_ready
+                = [](barrier_tuple const& tuple) { return std::get<1>(tuple).use_count() - *std::get<2>(tuple) == 1; };
 
             // Remove elements with zero atomic value and collect their coroutine handles
             auto it = queue.begin();
@@ -86,7 +69,7 @@ namespace rg
             {
                 if(is_ready(*it))
                 {
-                    pool->addTask(it->first);
+                    pool->addTask(std::get<0>(*it));
                     it = queue.erase(it); // Remove from queue
                 }
                 else
