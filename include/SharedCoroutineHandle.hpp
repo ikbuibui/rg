@@ -137,7 +137,7 @@ namespace rg
         }
 
         // Access the use count of the shared handle
-        std::size_t use_count() const noexcept
+        auto use_count() const noexcept
         {
             return handle_.use_count();
         }

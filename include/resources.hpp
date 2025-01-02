@@ -311,12 +311,12 @@ namespace rg
         }
 
         // Constructor for rvalue (temporary value)
-        Resource(T&& value) : storage(std::forward<T>(value))
+        Resource(T&& value) : storage(std::move(value))
         {
             // std::cout << "Moved temporary value into Resource" << std::endl;
         }
 
-        Resource() : storage(std::forward<T>(T{}))
+        Resource() : storage(std::move(T{}))
         {
             // std::cout << "Default construct T" << std::endl;
         }

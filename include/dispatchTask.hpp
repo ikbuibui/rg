@@ -27,7 +27,7 @@ namespace rg
         bool resourcesReady;
 
         DispatchAwaiter(T&& handleObj, bool resourcesReady)
-            : handle{std::forward<T>(handleObj)}
+            : handle{std::move(handleObj)}
             , resourcesReady{resourcesReady}
         {
         }
