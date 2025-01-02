@@ -199,8 +199,8 @@ namespace rg
                     if(expectedState == 2) // get has been pushed handle already
                     {
                         // push getWaiterHandle to ready tasks;
-                        pool_p->addTask(getWaiterHandle);
-
+                        // pool_p->addTask(getWaiterHandle);
+                        return {std::move(self), getWaiterHandle};
                         // when get is finally resumed, its await resume will take out the value, then we can try
                         // destruction if possible, else hand it over to the task space
 
@@ -256,7 +256,6 @@ namespace rg
                 // pass in the pool ptr
                 awaiter_promise.pool_p = pool_p;
 
-                // coro.promise().space->pool_p = pool_p;
                 // coro.promise().space->ownerHandle = coro.getHandle();
                 awaiter_promise.parent = self;
 

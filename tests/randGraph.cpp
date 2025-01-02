@@ -110,7 +110,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
         {
         case 0:
             {
-                auto asdaf1 = co_await rg::dispatch_task(
+                co_await rg::dispatch_task(
                     []() -> rg::Task<int>
                     {
                         sleep(task_duration);
