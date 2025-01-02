@@ -120,8 +120,8 @@ namespace rg
             }
 
             // TODO contrain args to resource concept
-            template<typename U>
-            auto await_transform(DispatchAwaiter<U> awaiter)
+            template<typename U, bool finishedOnReturn>
+            auto await_transform(DispatchAwaiter<U, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -131,9 +131,11 @@ namespace rg
                 // pass in the pool ptr
                 awaiter_promise.pool_p = pool_p;
 
-                // coro.promise().space->pool_p = pool_p;
                 // coro.promise().space->ownerHandle = coro.getHandle();
-                awaiter_promise.parent = self;
+                if constexpr(!finishedOnReturn)
+                {
+                    awaiter_promise.parent = self;
+                }
 
                 // Init over
 

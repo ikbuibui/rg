@@ -111,10 +111,10 @@ namespace rg
         template<typename U>
         friend struct InitTask;
 
-        template<typename U>
+        template<typename U, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<typename Callable, typename... ResourceAccess>
+        template<bool finishedOnReturn, typename Callable, typename... ResourceAccess>
         friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
@@ -244,8 +244,8 @@ namespace rg
             // TODO PASS BY REF? also in init
             // Called by children of this task
             // TODO think abour using a concept
-            template<typename U>
-            auto await_transform(DispatchAwaiter<U> awaiter)
+            template<typename U, bool finishedOnReturn>
+            auto await_transform(DispatchAwaiter<U, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -257,7 +257,10 @@ namespace rg
                 awaiter_promise.pool_p = pool_p;
 
                 // coro.promise().space->ownerHandle = coro.getHandle();
-                awaiter_promise.parent = self;
+                if constexpr(!finishedOnReturn)
+                {
+                    awaiter_promise.parent = self;
+                }
 
                 // Init over
 
@@ -350,10 +353,10 @@ namespace rg
         template<typename U>
         friend struct InitTask;
 
-        template<typename U>
+        template<typename U, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<typename Callable, typename... ResourceAccess>
+        template<bool finishedOnReturn, typename Callable, typename... ResourceAccess>
         friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
@@ -451,8 +454,8 @@ namespace rg
             // TODO PASS BY REF? also in init
             // Called by children of this task
             // TODO think abour using a concept
-            template<typename U>
-            auto await_transform(DispatchAwaiter<U> awaiter)
+            template<typename U, bool finishedOnReturn>
+            auto await_transform(DispatchAwaiter<U, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -463,9 +466,11 @@ namespace rg
                 // pass in the pool ptr
                 awaiter_promise.pool_p = pool_p;
 
-                // coro.promise().space->pool_p = pool_p;
                 // coro.promise().space->ownerHandle = coro.getHandle();
-                awaiter_promise.parent = self;
+                if constexpr(!finishedOnReturn)
+                {
+                    awaiter_promise.parent = self;
+                }
 
                 // Init over
 

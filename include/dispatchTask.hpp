@@ -11,27 +11,23 @@
 
 namespace rg
 {
-    // forward declaration
-    template<typename T>
-    struct Task;
-
     // if(resourcesReady)
     //   return awaiter that suspends, adds continuation to stack, and executes task
     // elseif resources not ready
     //   already added handle to waiting task map/or set waiting atomic value, return awaiter that suspend never
     //   (executes the continuation)
     // TODO switch to IsResourceAccess
-    template<typename T>
+    template<typename T, bool finishedOnReturn>
     struct DispatchAwaiter
     {
         // using ResourceAccessList
         //     = TypeList<ResourceAccess<ResourceHandles::resource_id, typename ResourceHandles::access_type>...>;
         // takes ownership of the handle, and passes it on in await resume
-        Task<T> handle;
+        T handle;
         bool resourcesReady;
 
-        DispatchAwaiter(Task<T>&& handleObj, bool resourcesReady)
-            : handle{std::forward<Task<T>>(handleObj)}
+        DispatchAwaiter(T&& handleObj, bool resourcesReady)
+            : handle{std::forward<T>(handleObj)}
             , resourcesReady{resourcesReady}
         {
         }
@@ -98,7 +94,7 @@ namespace rg
     // Callable is a Task
     // thread_local static uint counter = 0;
 
-    template<typename Callable, typename... ResourceAccess>
+    template<bool finishedOnReturn = false, typename Callable, typename... ResourceAccess>
     auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles)
     {
         // TODO bind resources with restrictions applied
@@ -172,7 +168,7 @@ namespace rg
         //  returns task returnHandleObject
 
         // final_suspend removes from task and notifies
-        return DispatchAwaiter{std::move(handle), resReady};
+        return DispatchAwaiter<decltype(handle), finishedOnReturn>{std::move(handle), resReady};
     }
 
     // TODO Dispatch for
