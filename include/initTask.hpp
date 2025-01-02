@@ -272,9 +272,8 @@ namespace rg
             return result;
         }
 
-        SharedCoroutineHandle coro;
-
     private:
+        SharedCoroutineHandle coro;
         bool isMoved = false;
     };
 
