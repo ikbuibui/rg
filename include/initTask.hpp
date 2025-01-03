@@ -51,7 +51,7 @@ namespace rg
             // std::atomic<uint32_t> waitCounter = 0;
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
-            std::coroutine_handle<> getWaiterHandle = nullptr;
+            std::coroutine_handle<> continuationHandle = nullptr;
             // mutex to synchronize final suspend and .get() waiting which adds a dependency
             // used for barrier
             std::mutex mtx;
@@ -120,8 +120,8 @@ namespace rg
             }
 
             // TODO contrain args to resource concept
-            template<typename U, bool finishedOnReturn>
-            auto await_transform(DispatchAwaiter<U, finishedOnReturn> awaiter)
+            template<typename U, bool Synchronous, bool finishedOnReturn>
+            auto await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise

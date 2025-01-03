@@ -14,13 +14,9 @@ inline auto fib(size_t n) -> rg::Task<size_t>
         co_return n;
     }
 
-    auto a = co_await rg::dispatch_task(fib, n - 1);
-    auto b = co_await rg::dispatch_task(fib, n - 2);
-    // Workaround for compiler bugs. Started encountering this issue with commit 16e1b9c
-    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=97452
-    // https://stackoverflow.com/questions/64348125/c20-coroutines-unexpected-reordering-of-await-resume-return-value-and-yield
-    auto b_result = co_await b.get();
-    co_return co_await a.get() + b_result;
+    auto a = co_await rg::dispatch_task<false, true>(fib, n - 1);
+    auto b = co_await rg::dispatch_task<true, true>(fib, n - 2);
+    co_return co_await a.get() + b;
 };
 
 auto main_wrapper(rg::ThreadPool* ptr, size_t n) -> rg::InitTask<int>

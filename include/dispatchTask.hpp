@@ -11,6 +11,65 @@
 
 namespace rg
 {
+    template<typename T, bool Synchronous = false, bool finishedOnReturn = false>
+    struct DispatchAwaiter;
+
+    template<typename T, bool finishedOnReturn>
+    struct DispatchAwaiter<T, true, finishedOnReturn>
+    {
+        T handle;
+        bool resourcesReady;
+
+        DispatchAwaiter(T&& handleObj, bool resourcesReady)
+            : handle{std::move(handleObj)}
+            , resourcesReady{resourcesReady}
+        {
+        }
+
+        // always suspend
+        bool await_ready() const noexcept
+        {
+            return false;
+        }
+
+        //  resources are not ready. add this continuation to handle and suspend
+        template<typename TPromise>
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> h) const noexcept
+        {
+            handle.coro.template promise<typename T::promise_type>().continuationHandle = h;
+            uint32_t expectedState = 1;
+            handle.coro.template promise<typename T::promise_type>().workingState.compare_exchange_strong(
+                expectedState,
+                2);
+            // we are responsible to execute the task
+            if(resourcesReady)
+            {
+                return handle.coro.get_coroutine_handle();
+            }
+            // task was blocked initially and was asynchronously executed
+            else
+            {
+                // task was done before continuation handle was added
+                if(expectedState == 0)
+                {
+                    return h;
+                }
+                else
+                {
+                    return std::noop_coroutine();
+                }
+            }
+        }
+
+        // passes the return object
+        // TODO add return type
+        auto await_resume() const noexcept
+        {
+            // return value
+            return handle.coro.template promise<typename T::promise_type>().result.value();
+        }
+    };
+
     // if(resourcesReady)
     //   return awaiter that suspends, adds continuation to stack, and executes task
     // elseif resources not ready
@@ -18,7 +77,7 @@ namespace rg
     //   (executes the continuation)
     // TODO switch to IsResourceAccess
     template<typename T, bool finishedOnReturn>
-    struct DispatchAwaiter
+    struct DispatchAwaiter<T, false, finishedOnReturn>
     {
         // using ResourceAccessList
         //     = TypeList<ResourceAccess<ResourceHandles::resource_id, typename ResourceHandles::access_type>...>;
@@ -94,7 +153,7 @@ namespace rg
     // Callable is a Task
     // thread_local static uint counter = 0;
 
-    template<bool finishedOnReturn = false, typename Callable, typename... ResourceAccess>
+    template<bool Synchronous = false, bool finishedOnReturn = false, typename Callable, typename... ResourceAccess>
     auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles)
     {
         // TODO bind resources with restrictions applied
@@ -168,7 +227,7 @@ namespace rg
         //  returns task returnHandleObject
 
         // final_suspend removes from task and notifies
-        return DispatchAwaiter<decltype(handle), finishedOnReturn>{std::move(handle), resReady};
+        return DispatchAwaiter<decltype(handle), Synchronous, finishedOnReturn>{std::move(handle), resReady};
     }
 
     // TODO Dispatch for

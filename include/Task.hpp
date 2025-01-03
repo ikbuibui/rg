@@ -28,7 +28,6 @@ namespace rg
 
         bool await_ready() const noexcept
         {
-            // return coro.promise<AwaitedPromise>().task_done;
             // if it is 0, task is done, continue, if 1, then pause task
             return !coro.promise<AwaitedPromise>().workingState;
         }
@@ -47,14 +46,14 @@ namespace rg
             // check again after lock is taken in case coro finished between await ready and locking in await suspend
             // if(!coro.promise<AwaitedPromise>().task_done)
             // {
-            //     // Safely set h as the getWaiterHandle for coro
-            //     coro.promise<AwaitedPromise>().getWaiterHandle = h;
+            //     // Safely set h as the continuationHandle for coro
+            //     coro.promise<AwaitedPromise>().continuationHandle = h;
 
             //     // Suspend the coroutine
             //     return true;
             // }
             // return false;
-            coro.promise<AwaitedPromise>().getWaiterHandle = h;
+            coro.promise<AwaitedPromise>().continuationHandle = h;
             uint32_t expectedState = 1;
             coro.promise<AwaitedPromise>().workingState.compare_exchange_strong(expectedState, 2);
             // return true to suspend if expected state is 1
@@ -111,10 +110,10 @@ namespace rg
         template<typename U>
         friend struct InitTask;
 
-        template<typename U, bool finishedOnReturn>
+        template<typename U, bool Synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<bool finishedOnReturn, typename Callable, typename... ResourceAccess>
+        template<bool Synchronous, bool finishedOnReturn, typename Callable, typename... ResourceAccess>
         friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
@@ -130,14 +129,13 @@ namespace rg
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
-            bool task_done = false;
             std::atomic<uint32_t> workingState = 1;
             // TODO think if i should init this to 1
             std::atomic<size_t> handleCounter{0u};
 
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
-            std::coroutine_handle<> getWaiterHandle{nullptr};
+            std::coroutine_handle<> continuationHandle{nullptr};
 
             // hold parent to keep it alive
             SharedCoroutineHandle parent;
@@ -194,13 +192,11 @@ namespace rg
                     uint32_t expectedState = 1;
                     workingState.compare_exchange_strong(expectedState, 0);
 
-                    // TODO remove task done
-                    task_done = true;
                     if(expectedState == 2) // get has been pushed handle already
                     {
-                        // push getWaiterHandle to ready tasks;
-                        // pool_p->addTask(getWaiterHandle);
-                        return {std::move(self), getWaiterHandle};
+                        // push continuationHandle to ready tasks;
+                        // pool_p->addTask(continuationHandle);
+                        return {std::move(self), continuationHandle};
                         // when get is finally resumed, its await resume will take out the value, then we can try
                         // destruction if possible, else hand it over to the task space
 
@@ -244,8 +240,8 @@ namespace rg
             // TODO PASS BY REF? also in init
             // Called by children of this task
             // TODO think abour using a concept
-            template<typename U, bool finishedOnReturn>
-            auto await_transform(DispatchAwaiter<U, finishedOnReturn> awaiter)
+            template<typename U, bool Synchronous, bool finishedOnReturn>
+            auto await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -353,10 +349,10 @@ namespace rg
         template<typename U>
         friend struct InitTask;
 
-        template<typename U, bool finishedOnReturn>
+        template<typename U, bool Synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<bool finishedOnReturn, typename Callable, typename... ResourceAccess>
+        template<bool Synchronous, bool finishedOnReturn, typename Callable, typename... ResourceAccess>
         friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
@@ -370,9 +366,13 @@ namespace rg
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
-
+            std::atomic<uint32_t> workingState = 1;
             // TODO think if i should init this to 1
             std::atomic<size_t> handleCounter{0u};
+
+            // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
+            // someone else waits for the completion of this task.
+            std::coroutine_handle<> continuationHandle{nullptr};
 
             // hold parent to keep it alive
             SharedCoroutineHandle parent;
@@ -439,6 +439,15 @@ namespace rg
                 //     // safe because this will not
                 //     self.reset();
                 // }
+
+                // get is never called, but void tasks may be called synchronously
+                uint32_t expectedState = 1;
+                workingState.compare_exchange_strong(expectedState, 0);
+                // contHandle has been pushed already
+                if(expectedState == 2)
+                {
+                    return {std::move(self), continuationHandle};
+                }
                 return {std::move(self)};
             }
 

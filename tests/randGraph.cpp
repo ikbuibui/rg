@@ -110,22 +110,22 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
         {
         case 0:
             {
-                co_await rg::dispatch_task(
-                    []() -> rg::Task<int>
+                co_await rg::dispatch_task<false, true>(
+                    []() -> rg::Task<void>
                     {
                         sleep(task_duration);
-                        co_return 0;
+                        co_return;
                     });
                 break;
             }
         case 1:
             {
-                co_await rg::dispatch_task(
-                    [](auto ra1, auto i) -> rg::Task<int>
+                co_await rg::dispatch_task<false, true>(
+                    [](auto ra1, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
-                        co_return 0;
+                        co_return;
                     },
                     resources[access_pattern[i][0]].rg_write(),
                     i);
@@ -133,13 +133,13 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 2:
             {
-                auto asdaf3 = co_await rg::dispatch_task(
-                    [](auto ra1, auto ra2, auto i) -> rg::Task<int>
+                co_await rg::dispatch_task<false, true>(
+                    [](auto ra1, auto ra2, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
                         hash(i, *ra2);
-                        co_return 0;
+                        co_return;
                     },
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
@@ -148,14 +148,14 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 3:
             {
-                auto asdaf4 = co_await rg::dispatch_task(
-                    [](auto ra1, auto ra2, auto ra3, auto i) -> rg::Task<int>
+                co_await rg::dispatch_task<false, true>(
+                    [](auto ra1, auto ra2, auto ra3, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
                         hash(i, *ra2);
                         hash(i, *ra3);
-                        co_return 0;
+                        co_return;
                     },
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
@@ -165,15 +165,15 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 4:
             {
-                auto asdaf5 = co_await rg::dispatch_task(
-                    [](auto ra1, auto ra2, auto ra3, auto ra4, auto i) -> rg::Task<int>
+                co_await rg::dispatch_task<false, true>(
+                    [](auto ra1, auto ra2, auto ra3, auto ra4, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
                         hash(i, *ra2);
                         hash(i, *ra3);
                         hash(i, *ra4);
-                        co_return 0;
+                        co_return;
                     },
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
@@ -184,8 +184,8 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 5:
             {
-                auto asdaf6 = co_await rg::dispatch_task(
-                    [](auto ra1, auto ra2, auto ra3, auto ra4, auto ra5, auto i) -> rg::Task<int>
+                co_await rg::dispatch_task<false, true>(
+                    [](auto ra1, auto ra2, auto ra3, auto ra4, auto ra5, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
@@ -193,7 +193,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
                         hash(i, *ra3);
                         hash(i, *ra4);
                         hash(i, *ra5);
-                        co_return 0;
+                        co_return;
                     },
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
