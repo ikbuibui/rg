@@ -54,18 +54,17 @@ template<size_t Depth = 6>
 rg::Task<void> loop_skynet()
 {
     std::printf("runs:\n");
+    auto startTime = std::chrono::high_resolution_clock::now();
     for(size_t j = 0; j < iter_count; ++j)
     {
-        auto startTime = std::chrono::high_resolution_clock::now();
-
         co_await rg::dispatch_task(skynet<Depth>);
         co_await rg::BarrierAwaiter{};
-
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto totalTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-        std::printf("  - iteration_count: %" PRIu64 "\n", iter_count);
-        std::printf("    duration: %" PRIu64 " us\n", totalTimeUs.count());
     }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto totalTimeUs = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+    std::printf("  - iteration_count: %" PRIu64 "\n", iter_count);
+    std::printf("    duration: %" PRIu64 " us\n", totalTimeUs.count());
 }
 
 auto main_wrapper(rg::ThreadPool* ptr) -> rg::InitTask<int>
