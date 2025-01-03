@@ -80,11 +80,20 @@ namespace rg
             return *this;
         }
 
+        // doesn't use decrement and setting address and refcnt to nullptr, to avoid use after free, in case the handle
+        // is destroyed on decrement (since handle might be held in the coroutine frame)
         void reset()
         {
-            decrement_ref();
+            auto local_address_copy = address_;
+            auto local_ref_count_copy = ref_count_;
+
             address_ = nullptr;
             ref_count_ = nullptr;
+
+            if(local_ref_count_copy && local_ref_count_copy->fetch_sub(1) == 1)
+            {
+                std::coroutine_handle<>::from_address(local_address_copy).destroy();
+            }
         }
 
         // Checks if the handle is valid
