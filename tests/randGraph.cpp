@@ -29,18 +29,18 @@ void hash(unsigned task_id, std::array<uint64_t, 8>& val)
 }
 
 std::chrono::microseconds task_duration(2);
-unsigned n_resources = 16;
-unsigned n_tasks = 128;
-unsigned n_threads = 8;
-unsigned min_dependencies = 0;
-unsigned max_dependencies = 5;
-std::mt19937 gen;
+static unsigned const n_resources = 16;
+static unsigned const n_tasks = 128;
+static unsigned const n_threads = 8;
+static unsigned const min_dependencies = 0;
+static unsigned const max_dependencies = 5;
 
 std::vector<std::vector<unsigned>> access_pattern;
 std::vector<std::array<uint64_t, 8>> expected_hash;
 
 void generate_access_pattern()
 {
+    std::mt19937 gen;
     std::uniform_int_distribution<unsigned> distrib_n_deps(min_dependencies, max_dependencies);
     std::uniform_int_distribution<unsigned> distrib_resource(0, n_resources - 1);
 

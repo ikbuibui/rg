@@ -64,7 +64,7 @@ namespace rg
             std::generate_n(
                 std::back_inserter(thread_queues),
                 size,
-                [this] { return std::make_unique<stack_type>(threadPoolStackSize); });
+                [] { return std::make_unique<stack_type>(threadPoolStackSize); });
 
             threads.reserve(size);
             uint16_t i = 0;

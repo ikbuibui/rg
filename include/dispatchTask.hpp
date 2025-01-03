@@ -20,9 +20,7 @@ namespace rg
         T handle;
         bool resourcesReady;
 
-        DispatchAwaiter(T&& handleObj, bool resourcesReady)
-            : handle{std::move(handleObj)}
-            , resourcesReady{resourcesReady}
+        DispatchAwaiter(T&& handleObj, bool resReady) : handle{std::move(handleObj)}, resourcesReady{resReady}
         {
         }
 
@@ -85,9 +83,7 @@ namespace rg
         T handle;
         bool resourcesReady;
 
-        DispatchAwaiter(T&& handleObj, bool resourcesReady)
-            : handle{std::move(handleObj)}
-            , resourcesReady{resourcesReady}
+        DispatchAwaiter(T&& handleObj, bool resReady) : handle{std::move(handleObj)}, resourcesReady{resReady}
         {
         }
 

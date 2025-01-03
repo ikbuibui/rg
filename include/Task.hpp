@@ -36,23 +36,8 @@ namespace rg
         template<typename ContPromise>
         constexpr bool await_suspend(std::coroutine_handle<ContPromise> h) const noexcept
         {
-            // once we aquire lock,
             // If coro not done, add h to its waiter handle and it will be done in final suspend
             // if coro is done, we can simply resume h
-            // Moved outside to make lock small
-
-            // We can move this lock into setHandle
-            // std::lock_guard lock(coro.promise<AwaitedPromise>().mutex);
-            // check again after lock is taken in case coro finished between await ready and locking in await suspend
-            // if(!coro.promise<AwaitedPromise>().task_done)
-            // {
-            //     // Safely set h as the continuationHandle for coro
-            //     coro.promise<AwaitedPromise>().continuationHandle = h;
-
-            //     // Suspend the coroutine
-            //     return true;
-            // }
-            // return false;
             coro.promise<AwaitedPromise>().continuationHandle = h;
             uint32_t expectedState = 1;
             coro.promise<AwaitedPromise>().workingState.compare_exchange_strong(expectedState, 2);
@@ -63,37 +48,7 @@ namespace rg
         // will only be called after the task is done
         auto await_resume() const noexcept
         {
-            auto val = coro.promise<AwaitedPromise>().result.value();
-
-            // TODO Add lock here so that childeren cant be done before destroy parent is set
-            // think if it needs to lock with children done or deregister or both.
-            // doesnt need to lock with final_suspend
-            // children space is done
-            // if(coro.promise().space.done())
-            // {
-            //     // deregister from parent already done by space, since task has finished and thats why we have
-            //     resumed
-            //     // the get
-            //     // once task finished, it places the responsibility of deregistering to the space
-            //     // destroy coroutine frame
-            //     coro.destroy();
-            // }
-            // else
-            // {
-            //     // destruction responsibilty is now with space
-            //     coro.promise().space.destroyOnDone = true;
-            // }
-            // TODO add locks to make sure when set to be destructible someone didnt deregister
-            // if(coro.promise().space.empty())
-            // {
-            //     coro.destroy();
-            // }
-            // else
-            // {
-            //     coro.promise().space.setDestructible();
-            // }
-
-            return val;
+            return coro.promise<AwaitedPromise>().result.value();
         }
     };
 
@@ -122,8 +77,6 @@ namespace rg
 
             // initialized in await_transform of parent coroutine
             ThreadPool* pool_p{};
-            // does this need to be optional?
-            std::optional<T> result = std::nullopt;
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
@@ -144,11 +97,10 @@ namespace rg
             // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
             SharedCoroutineHandle self;
 
-            // Task space for the children of this task. Passed in its ptr during await transform
-            // std::shared_ptr<ExecutionSpace> space = std::make_shared<ExecutionSpace>();
-
             // hold res in vector to deregister later
             std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
+            // does this need to be optional?
+            std::optional<T> result = std::nullopt;
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
@@ -180,54 +132,20 @@ namespace rg
                 return {};
             }
 
-            // do suspend_if, if returns void, suspend never (which will destroy the coroutine), if returns a value,
-            // suspend_always and destroy in get/task space
-            // Think about task space being done for deletion and suspension
-            // if this doesnt suspend, then done will never return true
-            // do suspend always? suspend if task space is not empty
-            // if it returns something - try destroy after .get() or in the destructor of the handle object
-            // it it returns nothing, try here
-            // destroy cannot happen before final suspend
             FinalDelete final_suspend() noexcept
             {
-                { // Lock for final_suspend, get_awaiter, and execSpace remove. They cannot happen together
-                    // std::lock_guard lock(mutex);
-                    uint32_t expectedState = 1;
-                    workingState.compare_exchange_strong(expectedState, 0);
-
-                    if(expectedState == 2) // get has been pushed handle already
-                    {
-                        // push continuationHandle to ready tasks;
-                        // pool_p->addTask(continuationHandle);
-                        return {std::move(self), continuationHandle};
-                        // when get is finally resumed, its await resume will take out the value, then we can try
-                        // destruction if possible, else hand it over to the task space
-
-                        // TODO think about optimization to resume instantly on this thread.
-                        // Maybe if returning a coroutine in final suspend's await resume is possible, make the
-                        // worker instantly execute it. But is the old coroutine destroyed already?
-                    }
+                uint32_t expectedState = 1;
+                workingState.compare_exchange_strong(expectedState, 0);
+                // contHandle has been pushed already
+                if(expectedState == 2)
+                {
+                    return {std::move(self), continuationHandle};
+                    // when continuation is finally resumed, await_resume will take out the value
                 }
-                // we are done, no need to hold self anymore.
-                // self.reset();
-                // This is safe because at final suspend point no other threads will concurrently add siblings
-                // all siblings have been added already
-                // if(self.use_count() == 1)
-                // {
-                //     std::cout << "in if " << std::endl;
-                // }
-                // else
-                // {
-                //     std::cout << "in else " << std::endl;
-                //     assert(self.use_count() != 0);
-                //     // safe because this will not
-                //     self.reset();
-                // }
                 return {std::move(self)};
             }
 
-            void unhandled_exception()
-
+            [[noreturn]] void unhandled_exception()
             {
                 std::terminate();
             }
@@ -383,9 +301,6 @@ namespace rg
             // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
             SharedCoroutineHandle self;
 
-            // Task space for the children of this task. Passed in its ptr during await transform
-            // std::shared_ptr<ExecutionSpace> space = std::make_shared<ExecutionSpace>();
-
             // hold res in vector to deregister later
             std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
 
@@ -419,32 +334,8 @@ namespace rg
                 return {};
             }
 
-            // do suspend_if, if returns void, suspend never (which will destroy the coroutine), if returns a value,
-            // suspend_always and destroy in get/task space
-            // Think about task space being done for deletion and suspension
-            // if this doesnt suspend, then done will never return true
-            // do suspend always? suspend if task space is not empty
-            // if it returns something - try destroy after .get() or in the destructor of the handle object
-            // it it returns nothing, try here
-            // destroy cannot happen before final suspend
             FinalDelete final_suspend() noexcept
             {
-                // we are done, no need to hold self anymore.
-                // self.reset();
-                // This is safe because at final suspend point no other threads will concurrently add siblings
-                // all siblings have been added already
-                // if(self.use_count() == 1)
-                // {
-                //     std::cout << "in if " << std::endl;
-                // }
-                // else
-                // {
-                //     std::cout << "in else " << std::endl;
-                //     assert(self.use_count() != 0);
-                //     // safe because this will not
-                //     self.reset();
-                // }
-
                 // get is never called, but void tasks may be called synchronously
                 uint32_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
@@ -456,8 +347,7 @@ namespace rg
                 return {std::move(self)};
             }
 
-            void unhandled_exception()
-
+            [[noreturn]] void unhandled_exception()
             {
                 std::terminate();
             }

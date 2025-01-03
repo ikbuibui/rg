@@ -3,7 +3,6 @@
 #include "ThreadPool.hpp"
 
 #include <concepts>
-#include <cstdint>
 
 namespace rg
 {
@@ -25,7 +24,7 @@ namespace rg
         ThreadPool pool;
     };
 
-    auto init(uint32_t size) -> rg2
+    auto init(std::unsigned_integral auto size) -> rg2
     {
         return {size};
     }

@@ -24,16 +24,15 @@ namespace rg
         // TODO deal with type erasure, need to call promise
         std::coroutine_handle<> handle; // Coroutine handle
         // std::reference_wrapper<std::type_info const> access_mode; // Type information
-
-        AccessModes accessMode;
         std::atomic<uint32_t>* waitCounter_p{};
+        AccessModes accessMode;
 
         // TODO try passing T as parameter and then constructing
         template<typename TAccess>
-        task_access(std::coroutine_handle<> coro_handle, TAccess mode, std::atomic<uint32_t>* waitCounter_p)
+        task_access(std::coroutine_handle<> coro_handle, TAccess mode, std::atomic<uint32_t>* waitCtr_p)
             : handle(coro_handle)
+            , waitCounter_p{waitCtr_p}
             , accessMode(mode)
-            , waitCounter_p{waitCounter_p}
         {
         }
 
@@ -58,11 +57,10 @@ namespace rg
     {
     private:
         uint32_t resource_uid; // Unique identifier for the resource
-        std::forward_list<task_access> tasks{}; // List of task_access instances
-
         std::forward_list<task_access>::iterator firstNotReady; // Iterator to the first not-ready task
         std::forward_list<task_access>::iterator lastTask; // Iterator to the last task before end
 
+        std::forward_list<task_access> tasks{}; // List of task_access instances
         std::mutex mtx;
 
     public:

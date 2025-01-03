@@ -7,7 +7,6 @@
 
 #include <condition_variable>
 #include <coroutine>
-#include <iostream>
 #include <mutex>
 #include <optional>
 
@@ -68,9 +67,6 @@ namespace rg
             std::atomic<size_t> handleCounter{0u};
             std::atomic<size_t> sharedOwnerCounter{1u};
 
-            // Task space for the children of this task. Passed in its ptr during await transform
-            // std::shared_ptr<ExecutionSpace> rootSpace = std::make_shared<ExecutionSpace>();
-
             template<typename... Args>
             promise_type(ThreadPool* ptr, Args...) : pool_p{ptr}
             {
@@ -112,7 +108,7 @@ namespace rg
                 return {std::move(self)};
             }
 
-            void unhandled_exception()
+            [[noreturn]] void unhandled_exception()
             {
                 std::terminate();
             }
