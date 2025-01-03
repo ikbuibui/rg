@@ -132,6 +132,7 @@ namespace rg
             std::atomic<uint32_t> workingState = 1;
             // TODO think if i should init this to 1
             std::atomic<size_t> handleCounter{0u};
+            std::atomic<size_t> sharedOwnerCounter{1u};
 
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
@@ -166,7 +167,9 @@ namespace rg
 
             Task get_return_object()
             {
-                self = SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this));
+                self = SharedCoroutineHandle(
+                    std::coroutine_handle<promise_type>::from_promise(*this),
+                    sharedOwnerCounter);
                 return Task{self};
             }
 
@@ -369,7 +372,7 @@ namespace rg
             std::atomic<uint32_t> workingState = 1;
             // TODO think if i should init this to 1
             std::atomic<size_t> handleCounter{0u};
-
+            std::atomic<size_t> sharedOwnerCounter{1u};
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
             std::coroutine_handle<> continuationHandle{nullptr};
@@ -403,7 +406,9 @@ namespace rg
 
             Task get_return_object()
             {
-                self = SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this));
+                self = SharedCoroutineHandle(
+                    std::coroutine_handle<promise_type>::from_promise(*this),
+                    sharedOwnerCounter);
                 return Task{self};
             }
 

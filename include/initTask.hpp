@@ -64,6 +64,7 @@ namespace rg
 
             // TODO think if i should init this to 1
             std::atomic<size_t> handleCounter{0u};
+            std::atomic<size_t> sharedOwnerCounter{1u};
 
             // Task space for the children of this task. Passed in its ptr during await transform
             // std::shared_ptr<ExecutionSpace> rootSpace = std::make_shared<ExecutionSpace>();
@@ -85,7 +86,9 @@ namespace rg
 
             InitTask get_return_object()
             {
-                self = SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this));
+                self = SharedCoroutineHandle(
+                    std::coroutine_handle<promise_type>::from_promise(*this),
+                    sharedOwnerCounter);
                 return InitTask{self};
             }
 
@@ -217,7 +220,7 @@ namespace rg
             // auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
 
             // TODO fix! wont work if the user copies the init task handle
-            while(coro.use_count() > coro.promise<promise_type>().handleCounter)
+            while(*coro.use_count_ptr() > coro.promise<promise_type>().handleCounter)
             {
                 // if(backoff_time < max_backoff_time)
                 // {

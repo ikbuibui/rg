@@ -11,62 +11,104 @@
 namespace rg
 {
 
-    // Custom deleter for coroutine handles
-    // dont need the promise type do cleanup in the promise destrouctor
-    template<typename PromiseType>
-    void coroutine_handle_deleter(void* address)
-    {
-        auto handle = std::coroutine_handle<PromiseType>::from_address(address);
-        // destroy
-        // std::cout << "destroy handle" << std::endl;
-        handle.destroy();
-    }
-
-    // Shared handle wrapper around coroutine_handle
+    // Note this class should not be accessed after being moved from or reset
     class SharedCoroutineHandle
     {
     public:
-        friend class WeakCoroutineHandle;
-
         template<typename PromiseType>
-        explicit SharedCoroutineHandle(std::coroutine_handle<PromiseType> handle)
-            : handle_(std::shared_ptr<void>(handle.address(), coroutine_handle_deleter<PromiseType>))
+        explicit SharedCoroutineHandle(std::coroutine_handle<PromiseType> handle, std::atomic<size_t>& ref_count)
+            : address_(handle.address())
+            , ref_count_(&ref_count)
         {
         }
 
-        explicit SharedCoroutineHandle() : handle_(nullptr)
+        explicit SharedCoroutineHandle(void* address, std::atomic<size_t>& ref_count)
+            : address_(address)
+            , ref_count_(&ref_count)
         {
         }
 
-        // SharedCoroutineHandle(SharedCoroutineHandle const&) = default;
-        // SharedCoroutineHandle(SharedCoroutineHandle&&) = default;
-        // SharedCoroutineHandle& operator=(SharedCoroutineHandle const&) = default;
-        // SharedCoroutineHandle& operator=(SharedCoroutineHandle&&) = default;
-
-        // ~SharedCoroutineHandle()
-        // {
-        //     std::cout << "delete shared handle" << std::endl;
-        // }
-
-        // Checks if the handle is valid
-        explicit operator bool() const noexcept
+        explicit SharedCoroutineHandle() noexcept : address_(nullptr), ref_count_(nullptr)
         {
-            return handle_ != nullptr;
+        }
+
+        ~SharedCoroutineHandle()
+        {
+            decrement_ref();
+        }
+
+        SharedCoroutineHandle(SharedCoroutineHandle const& other)
+            : address_(other.address_)
+            , ref_count_(other.ref_count_)
+        {
+            increment_ref();
+        }
+
+        SharedCoroutineHandle(SharedCoroutineHandle&& other) noexcept
+            : address_(std::move(other.address_))
+            , ref_count_(std::move(other.ref_count_))
+        {
+            other.address_ = nullptr;
+            other.ref_count_ = nullptr;
+        }
+
+        // If this is the last object alive, and you assign to itself, it will burn
+        SharedCoroutineHandle& operator=(SharedCoroutineHandle const& other)
+        {
+            if(this != &other)
+            {
+                decrement_ref();
+                address_ = other.address_;
+                ref_count_ = other.ref_count_;
+                increment_ref();
+            }
+            return *this;
+        }
+
+        // If this is the last object alive, and you assign to itself, it will burn
+        SharedCoroutineHandle& operator=(SharedCoroutineHandle&& other) noexcept
+        {
+            if(this != &other)
+            {
+                decrement_ref();
+                address_ = other.address_;
+                ref_count_ = other.ref_count_;
+                other.address_ = nullptr;
+                other.ref_count_ = nullptr;
+            }
+
+            return *this;
         }
 
         void reset()
         {
-            handle_.reset();
+            decrement_ref();
+            address_ = nullptr;
+            ref_count_ = nullptr;
         }
 
-        // void resume() const
-        // {
-        //     auto handle = get_coroutine_handle();
-        //     if(handle)
-        //     {
-        //         handle.resume();
-        //     }
-        // }
+        // Checks if the handle is valid
+        explicit operator bool() const noexcept
+        {
+            return address_ != nullptr;
+        }
+
+        // checks if the object was ever initialized. It may be in an invalid state
+        bool is_init() const noexcept
+        {
+            return address_ != nullptr;
+        }
+
+        template<typename PromiseType>
+        std::coroutine_handle<PromiseType> get_coroutine_handle() const
+        {
+            return std::coroutine_handle<PromiseType>::from_address(address_);
+        }
+
+        std::coroutine_handle<> get_coroutine_handle() const
+        {
+            return std::coroutine_handle<>::from_address(address_);
+        }
 
         template<typename PromiseType>
         PromiseType& promise() const
@@ -79,83 +121,39 @@ namespace rg
             return handle.promise();
         }
 
-        template<typename PromiseType>
-        std::coroutine_handle<PromiseType> get_coroutine_handle() const
+        std::atomic<size_t>* use_count_ptr() const noexcept
         {
-            return std::coroutine_handle<PromiseType>::from_address(handle_.get());
+            return ref_count_;
         }
 
-        std::coroutine_handle<> get_coroutine_handle() const
-        {
-            return std::coroutine_handle<>::from_address(handle_.get());
-        }
-
-        auto use_count() const noexcept
-        {
-            return handle_.use_count();
-        }
 
     private:
-        // Retrieve the internal coroutine_handle
+        void* address_; // Raw pointer to the coroutine handle
+        std::atomic<size_t>* ref_count_; // Pointer to the thread-safe reference count
 
-        std::shared_ptr<void> handle_;
-    };
-
-    class WeakCoroutineHandle
-    {
-    public:
-        // Default constructor
-        WeakCoroutineHandle() = default;
-
-        // Constructor from a SharedCoroutineHandle
-        explicit WeakCoroutineHandle(SharedCoroutineHandle const& sharedHandle) : handle_(sharedHandle.handle_)
+        void destroy_coroutine()
         {
+            std::coroutine_handle<>::from_address(address_).destroy();
         }
 
-        // Checks if the weak handle is still valid
-        explicit operator bool() const noexcept
+        // TODO remove the if(ref_count) and setting to nullptr from increment and decrement
+
+        // Increment the reference count
+        void increment_ref()
         {
-            return !handle_.expired();
+            if(ref_count_)
+                ref_count_->fetch_add(1, std::memory_order_relaxed);
         }
 
-        // Reset the weak pointer
-        void reset()
+        // Decrement the reference count and clean up if it reaches zero
+        void decrement_ref()
         {
-            handle_.reset();
-        }
-
-        // Retrieve the corresponding shared handle if the weak pointer is valid
-        template<typename PromiseType>
-        SharedCoroutineHandle get_shared_handle() const
-        {
-            auto sharedPtr = handle_.lock();
-            if(!sharedPtr)
+            if(ref_count_ && ref_count_->fetch_sub(1, std::memory_order_acq_rel) == 1)
             {
-                throw std::runtime_error("Weak coroutine handle is expired");
+                ref_count_ = nullptr;
+
+                destroy_coroutine();
             }
-            return SharedCoroutineHandle(std::coroutine_handle<PromiseType>::from_address(sharedPtr.get()));
         }
-
-        // Access the use count of the shared handle
-        auto use_count() const noexcept
-        {
-            return handle_.use_count();
-        }
-
-        // std::size_t num_children() const noexcept {use_count() - h}
-
-        // Access the coroutine handle from the weak handle
-        std::coroutine_handle<> get_coroutine_handle() const
-        {
-            auto sharedPtr = handle_.lock();
-            if(!sharedPtr)
-            {
-                throw std::runtime_error("Weak coroutine handle is expired");
-            }
-            return std::coroutine_handle<>::from_address(sharedPtr.get());
-        }
-
-    private:
-        std::weak_ptr<void> handle_;
     };
 } // namespace rg

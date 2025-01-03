@@ -5,9 +5,7 @@
 #include <atomic>
 #include <coroutine>
 #include <cstddef>
-#include <memory>
 #include <mutex>
-#include <utility>
 #include <vector>
 
 namespace rg
@@ -36,7 +34,7 @@ namespace rg
 
     struct BarrierQueue
     {
-        using barrier_tuple = std::tuple<std::coroutine_handle<>, WeakCoroutineHandle, std::atomic<size_t>*>;
+        using barrier_tuple = std::tuple<std::coroutine_handle<>, std::atomic<size_t>*, std::atomic<size_t>*>;
 
         std::vector<barrier_tuple> queue;
         mutable std::mutex mtx;
@@ -49,7 +47,7 @@ namespace rg
         void emplace_back(SharedCoroutineHandle const& sharedHandle, std::atomic<size_t>& atomic_ptr)
         {
             std::lock_guard<std::mutex> lock(mtx);
-            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle, &atomic_ptr);
+            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle.use_count_ptr(), &atomic_ptr);
         }
 
         // Iterate, remove elements with zero atomic value, and return their coroutine handles
@@ -60,8 +58,7 @@ namespace rg
 
             // check if the barrier is ready
             // use count of 1, since parent task holds self. All children are done if use count - num handles = 1
-            auto is_ready
-                = [](barrier_tuple const& tuple) { return std::get<1>(tuple).use_count() - *std::get<2>(tuple) == 1; };
+            auto is_ready = [](barrier_tuple const& tuple) { return *std::get<1>(tuple) - *std::get<2>(tuple) == 1; };
 
             // Remove elements with zero atomic value and collect their coroutine handles
             auto it = queue.begin();
