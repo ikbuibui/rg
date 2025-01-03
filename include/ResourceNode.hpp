@@ -57,15 +57,19 @@ namespace rg
     {
     private:
         uint32_t resource_uid; // Unique identifier for the resource
+        std::forward_list<task_access> tasks; // List of task_access instances
         std::forward_list<task_access>::iterator firstNotReady; // Iterator to the first not-ready task
         std::forward_list<task_access>::iterator lastTask; // Iterator to the last task before end
 
-        std::forward_list<task_access> tasks{}; // List of task_access instances
         std::mutex mtx;
 
     public:
         // Constructor
-        ResourceNode(uint32_t uid) : resource_uid(uid), firstNotReady(tasks.end()), lastTask(tasks.before_begin())
+        ResourceNode(uint32_t uid)
+            : resource_uid(uid)
+            , tasks{}
+            , firstNotReady(tasks.end())
+            , lastTask(tasks.before_begin())
         {
             // std::cout << "node id : " << resource_uid << " created" << std::endl;
         }

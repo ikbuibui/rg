@@ -3,7 +3,6 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <type_traits>
 #include <utility>
