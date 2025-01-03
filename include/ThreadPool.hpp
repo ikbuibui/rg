@@ -168,7 +168,7 @@ namespace rg
             // std::cout << "Thread created " << std::this_thread::get_id() << std::endl;
             // std::coroutine_handle<> h;
             std::optional<std::coroutine_handle<>> h;
-            while(true)
+            while(!stoken.stop_requested())
             {
                 // if(thread_queues[index]->try_pop(h))
                 // {
@@ -252,10 +252,6 @@ namespace rg
                 // //     // destruction of h is dealt with final suspend type or in get if something is returend
                 // //     // worker_states.fetch_and(~mask, std::memory_order_release); // Set worker as idle
                 // // }
-                if(stoken.stop_requested())
-                {
-                    return;
-                }
             }
             // std::this_thread::yield();
 
