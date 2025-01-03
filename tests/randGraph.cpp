@@ -110,7 +110,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
         {
         case 0:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task(
                     []() -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -120,7 +120,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 1:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task(
                     [](auto ra1, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -133,7 +133,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 2:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task(
                     [](auto ra1, auto ra2, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -148,7 +148,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 3:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task(
                     [](auto ra1, auto ra2, auto ra3, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -165,7 +165,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 4:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task(
                     [](auto ra1, auto ra2, auto ra3, auto ra4, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -184,7 +184,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 5:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task(
                     [](auto ra1, auto ra2, auto ra3, auto ra4, auto ra5, auto i) -> rg::Task<void>
                     {
                         sleep(task_duration);
