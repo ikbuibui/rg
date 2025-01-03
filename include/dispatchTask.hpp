@@ -131,10 +131,10 @@ namespace rg
 
         // passes the return object
         // TODO add return type
-        auto await_resume() const noexcept
+        auto await_resume() noexcept
         {
             // return value
-            return handle;
+            return std::move(handle);
         }
     };
 

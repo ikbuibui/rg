@@ -48,7 +48,9 @@ namespace rg
         // will only be called after the task is done
         auto await_resume() const noexcept
         {
-            return coro.promise<AwaitedPromise>().result.value();
+            auto result = coro.promise<AwaitedPromise>().result.value();
+            coro.promise<AwaitedPromise>().coroOutsideTask = false;
+            return result;
         }
     };
 
@@ -83,8 +85,7 @@ namespace rg
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             std::atomic<uint32_t> workingState = 1;
-            // TODO think if i should init this to 1
-            std::atomic<size_t> handleCounter{0u};
+            // not incremented in constructor of shared handle
             std::atomic<size_t> sharedOwnerCounter{1u};
 
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
@@ -101,6 +102,8 @@ namespace rg
             std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
             // does this need to be optional?
             std::optional<T> result = std::nullopt;
+            // true as the return object is always created
+            bool coroOutsideTask = true;
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
@@ -204,29 +207,20 @@ namespace rg
 
         explicit Task(SharedCoroutineHandle const& h) noexcept : coro(h)
         {
-            coro.promise<promise_type>().handleCounter++;
         }
 
         Task() noexcept : coro()
         {
         }
 
-        Task(Task const& x) noexcept : coro{x.coro}
-        {
-            coro.promise<promise_type>().handleCounter++;
-        }
+        Task(Task const& x) = delete;
 
         Task(Task&& x) noexcept : coro{std::move(x.coro)}
         {
             x.isMoved = true;
         }
 
-        Task& operator=(Task const& x) noexcept
-        {
-            coro = x.coro;
-            coro.promise<promise_type>().handleCounter++;
-            return *this;
-        }
+        Task& operator=(Task const& x) = delete;
 
         Task& operator=(Task&& x) noexcept
         {
@@ -239,7 +233,7 @@ namespace rg
         {
             if(!isMoved && coro)
             {
-                coro.promise<promise_type>().handleCounter--;
+                coro.promise<promise_type>().coroOutsideTask = false;
             }
         }
 
@@ -288,8 +282,7 @@ namespace rg
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             std::atomic<uint32_t> workingState = 1;
-            // TODO think if i should init this to 1
-            std::atomic<size_t> handleCounter{0u};
+            // not incremented in constructor of shared handle
             std::atomic<size_t> sharedOwnerCounter{1u};
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
@@ -303,6 +296,8 @@ namespace rg
 
             // hold res in vector to deregister later
             std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
+            // true as the return object is always created
+            bool coroOutsideTask = true;
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
@@ -403,29 +398,20 @@ namespace rg
 
         explicit Task(SharedCoroutineHandle const& h) noexcept : coro(h)
         {
-            coro.promise<promise_type>().handleCounter++;
         }
 
         Task() noexcept : coro()
         {
         }
 
-        Task(Task const& x) noexcept : coro{x.coro}
-        {
-            coro.promise<promise_type>().handleCounter++;
-        }
+        Task(Task const& x) = delete;
 
         Task(Task&& x) noexcept : coro{std::move(x.coro)}
         {
             x.isMoved = true;
         }
 
-        Task& operator=(Task const& x) noexcept
-        {
-            coro = x.coro;
-            coro.promise<promise_type>().handleCounter++;
-            return *this;
-        }
+        Task& operator=(Task const& x) = delete;
 
         Task& operator=(Task&& x) noexcept
         {
@@ -438,7 +424,7 @@ namespace rg
         {
             if(!isMoved && coro)
             {
-                coro.promise<promise_type>().handleCounter--;
+                coro.promise<promise_type>().coroOutsideTask = false;
             }
         }
 

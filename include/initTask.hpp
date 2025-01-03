@@ -58,14 +58,14 @@ namespace rg
             std::mutex mtx;
             // used for barrier
             std::condition_variable cv;
+            SharedCoroutineHandle self;
+            // not incremented in constructor of shared handle
+            std::atomic<size_t> sharedOwnerCounter{1u};
+
             bool task_done = false;
             bool all_done = false;
-
-            SharedCoroutineHandle self;
-
-            // TODO think if i should init this to 1
-            std::atomic<size_t> handleCounter{0u};
-            std::atomic<size_t> sharedOwnerCounter{1u};
+            // true as the return object is always created
+            bool coroOutsideTask = true;
 
             template<typename... Args>
             promise_type(ThreadPool* ptr, Args...) : pool_p{ptr}
@@ -155,102 +155,78 @@ namespace rg
             }
         };
 
-        InitTask(SharedCoroutineHandle const& h) noexcept : coro{h}
+        explicit InitTask(SharedCoroutineHandle const& h) noexcept : coro{h}
         {
-            coro.promise<promise_type>().handleCounter++;
         }
 
-        InitTask(InitTask const& x) noexcept : coro{x.coro}
-        {
-            coro.promise<promise_type>().handleCounter++;
-        }
+        InitTask(InitTask const& x) = delete;
 
-        InitTask(InitTask&& x) noexcept : coro{std::move(x.coro)}
-        {
-            x.isMoved = true;
-        }
+        InitTask(InitTask&& x) = delete;
 
-        InitTask& operator=(InitTask const& x) noexcept
-        {
-            coro = x.coro;
-            coro.promise<promise_type>().handleCounter++;
-            return *this;
-        }
+        InitTask& operator=(InitTask const& x) = delete;
 
-        InitTask& operator=(InitTask&& x) noexcept
-        {
-            coro = std::move(x.coro);
-            x.isMoved = true;
-            return *this;
-        }
+        InitTask& operator=(InitTask&& x) = delete;
 
         ~InitTask() noexcept
         {
-            if(!isMoved && coro)
+            if(coro)
             {
-                coro.promise<promise_type>().handleCounter--;
-            }
-        }
-
-        // can this be task destructor
-        auto finalize()
-        {
-            // wait for task end, wait for root space to finish
-            // if(coro.use_count() == 1)
-            // {
-            //     coro.reset();
-            // }
-            // if(coro.use_count() > 1)
-            // {
-            //     std::unique_lock lock(coro.promise<promise_type>().mtx);
-            //     std::cout << "finalize locked. Task done : " << coro.promise<promise_type>().task_done
-            //               << "child counter : " << coro.promise<promise_type>().childCounter << std::endl;
-            //     coro.promise<promise_type>().cv.wait(
-            //         lock,
-            //         [this] {
-            //             return coro.promise<promise_type>().task_done
-            //                    && coro.promise<promise_type>().childCounter == 0;
-            //         });
-            // }
-            // std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
-            //
-            // auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
-            // auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
-
-            // TODO fix! wont work if the user copies the init task handle
-            while(*coro.use_count_ptr() > coro.promise<promise_type>().handleCounter)
-            {
-                // if(backoff_time < max_backoff_time)
+                // wait for task end, wait for root space to finish
+                // if(coro.use_count() == 1)
                 // {
-                //     std::this_thread::sleep_for(backoff_time);
-                //     backoff_time *= 2;
+                //     coro.reset();
                 // }
-                // else
+                // if(coro.use_count() > 1)
+                // {
+                //     std::unique_lock lock(coro.promise<promise_type>().mtx);
+                //     std::cout << "finalize locked. Task done : " << coro.promise<promise_type>().task_done
+                //               << "child counter : " << coro.promise<promise_type>().childCounter << std::endl;
+                //     coro.promise<promise_type>().cv.wait(
+                //         lock,
+                //         [this] {
+                //             return coro.promise<promise_type>().task_done
+                //                    && coro.promise<promise_type>().childCounter == 0;
+                //         });
+                // }
+                // std::cout << "finalize called with use count : " << coro.use_count() << std::endl;
+                //
+                // auto backoff_time = std::chrono::microseconds(1); // Initial backoff time
+                // auto const max_backoff_time = std::chrono::milliseconds(10); // Maximum backoff time
+
+                // This handle holds one copy of coro
+                while(*coro.use_count_ptr() > 1)
                 {
-                    std::this_thread::yield();
+                    // if(backoff_time < max_backoff_time)
+                    // {
+                    //     std::this_thread::sleep_for(backoff_time);
+                    //     backoff_time *= 2;
+                    // }
+                    // else
+                    {
+                        std::this_thread::yield();
+                    }
                 }
+
+                // while(coro.use_count() > 1)
+                // {
+                //     std::this_thread::sleep_for(std::chrono::seconds(3));
+                //     // std::cout << "use count : " << coro.use_count() << std::endl;
+                // }
+                coro.promise<promise_type>().coroOutsideTask = false;
+                coro.reset();
+
+                // {
+                //     std::unique_lock lock(coro.promise<promise_type>().mtx);
+                //     coro.promise<promise_type>().cv.wait(
+                //         lock,
+                //         [this] { return coro.promise<promise_type>().childCounter == 0; });
+                // }
+                // {
+                //     std::unique_lock lock(coro.promise().rootSpace->mtx);
+                //     // maybe better to set a done bool in the execution space rather that checking empty resList
+                //     coro.promise().rootSpace->cv.wait(lock, [this] { return coro.promise().rootSpace->done(); });
+                // }
             }
-
-            // while(coro.use_count() > 1)
-            // {
-            //     std::this_thread::sleep_for(std::chrono::seconds(3));
-            //     // std::cout << "use count : " << coro.use_count() << std::endl;
-            // }
-            coro.promise<promise_type>().handleCounter--;
-            coro.reset();
-            isMoved = true;
-
-            // {
-            //     std::unique_lock lock(coro.promise<promise_type>().mtx);
-            //     coro.promise<promise_type>().cv.wait(
-            //         lock,
-            //         [this] { return coro.promise<promise_type>().childCounter == 0; });
-            // }
-            // {
-            //     std::unique_lock lock(coro.promise().rootSpace->mtx);
-            //     // maybe better to set a done bool in the execution space rather that checking empty resList
-            //     coro.promise().rootSpace->cv.wait(lock, [this] { return coro.promise().rootSpace->done(); });
-            // }
         }
 
         std::optional<T> get()
@@ -275,7 +251,6 @@ namespace rg
 
     private:
         SharedCoroutineHandle coro;
-        bool isMoved = false;
     };
 
     // TODO also make initTask and orchestrate for void

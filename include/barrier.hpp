@@ -22,7 +22,7 @@ namespace rg
         {
             // std::cout << "in barrier" << std::endl;
 
-            h.promise().pool_p->barrier_queue.emplace_back(h.promise().self, h.promise().handleCounter);
+            h.promise().pool_p->barrier_queue.emplace_back(h.promise().self, h.promise().coroOutsideTask);
 
             return true;
         }
@@ -34,7 +34,7 @@ namespace rg
 
     struct BarrierQueue
     {
-        using barrier_tuple = std::tuple<std::coroutine_handle<>, std::atomic<size_t>*, std::atomic<size_t>*>;
+        using barrier_tuple = std::tuple<std::coroutine_handle<>, std::atomic<size_t>*, bool*>;
 
         std::vector<barrier_tuple> queue;
         mutable std::mutex mtx;
@@ -44,10 +44,10 @@ namespace rg
             queue.reserve(reserve_size);
         }
 
-        void emplace_back(SharedCoroutineHandle const& sharedHandle, std::atomic<size_t>& atomic_ptr)
+        void emplace_back(SharedCoroutineHandle const& sharedHandle, bool& coroOutsideTask)
         {
             std::lock_guard<std::mutex> lock(mtx);
-            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle.use_count_ptr(), &atomic_ptr);
+            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle.use_count_ptr(), &coroOutsideTask);
         }
 
         // Iterate, remove elements with zero atomic value, and return their coroutine handles

@@ -243,7 +243,5 @@ int main()
 
     auto poolObj = rg::init(n_threads);
     auto a = test(poolObj.pool_ptr());
-    a.finalize();
-    std::cout << "finalize done" << std::endl;
     return 0;
 }

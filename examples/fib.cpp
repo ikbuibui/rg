@@ -55,7 +55,5 @@ int main(int argc, char* argv[])
     auto poolObj = rg::init(thread_count);
     auto a = main_wrapper(poolObj.pool_ptr(), n);
 
-    a.finalize();
-
     return 0;
 }

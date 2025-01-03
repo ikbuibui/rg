@@ -4,8 +4,6 @@
 #include <cassert>
 #include <coroutine>
 #include <cstddef>
-#include <iostream>
-#include <memory>
 #include <stdexcept>
 
 namespace rg
@@ -16,13 +14,15 @@ namespace rg
     {
     public:
         template<typename PromiseType>
-        explicit SharedCoroutineHandle(std::coroutine_handle<PromiseType> handle, std::atomic<size_t>& ref_count)
+        explicit SharedCoroutineHandle(
+            std::coroutine_handle<PromiseType> handle,
+            std::atomic<size_t>& ref_count) noexcept
             : address_(handle.address())
             , ref_count_(&ref_count)
         {
         }
 
-        explicit SharedCoroutineHandle(void* address, std::atomic<size_t>& ref_count)
+        explicit SharedCoroutineHandle(void* address, std::atomic<size_t>& ref_count) noexcept
             : address_(address)
             , ref_count_(&ref_count)
         {
@@ -37,7 +37,7 @@ namespace rg
             decrement_ref();
         }
 
-        SharedCoroutineHandle(SharedCoroutineHandle const& other)
+        SharedCoroutineHandle(SharedCoroutineHandle const& other) noexcept
             : address_(other.address_)
             , ref_count_(other.ref_count_)
         {
@@ -53,7 +53,7 @@ namespace rg
         }
 
         // If this is the last object alive, and you assign to itself, it will burn
-        SharedCoroutineHandle& operator=(SharedCoroutineHandle const& other)
+        SharedCoroutineHandle& operator=(SharedCoroutineHandle const& other) noexcept
         {
             if(this != &other)
             {

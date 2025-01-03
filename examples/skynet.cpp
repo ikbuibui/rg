@@ -82,7 +82,5 @@ int main()
     auto poolObj = rg::init(thread_count);
     auto a = main_wrapper(poolObj.pool_ptr());
 
-    a.finalize();
-
     return 0;
 }
