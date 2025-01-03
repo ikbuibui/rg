@@ -462,7 +462,9 @@ namespace rg
                 std::terminate();
             }
 
-            void return_void() {};
+            void return_void()
+            {
+            }
 
             // TODO contrain args to resource concept
             // TODO PASS BY REF? also in init

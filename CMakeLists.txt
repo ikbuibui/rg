@@ -30,7 +30,10 @@ target_compile_features(rg INTERFACE cxx_std_20)
 target_compile_options(
   rg
   INTERFACE $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -fcoroutines>
-            $<$<CXX_COMPILER_ID:Clang>:-Weverything>
+            $<$<CXX_COMPILER_ID:Clang>:-Weverything
+            -Wno-c++98-compat
+            -Wno-c++98-compat-pedantic
+            -Wno-c++98-c++11-compat-pedantic>
             $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 
 find_package(Threads REQUIRED)

@@ -19,7 +19,7 @@ namespace rg
         bool await_ready() noexcept
         {
             return false;
-        };
+        }
 
         template<typename promise_type>
         void await_suspend(std::coroutine_handle<promise_type> h) noexcept
@@ -27,9 +27,11 @@ namespace rg
             // add me to stack
             // and return to main
             h.promise().pool_p->addTask(h);
-        };
+        }
 
-        void await_resume() noexcept {};
+        void await_resume() noexcept
+        {
+        }
     };
 
     // parser coroutine return type
