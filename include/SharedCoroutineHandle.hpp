@@ -13,16 +13,18 @@ namespace rg
     class SharedCoroutineHandle
     {
     public:
+        using TRefCount = uint32_t;
+
         template<typename PromiseType>
         explicit SharedCoroutineHandle(
             std::coroutine_handle<PromiseType> handle,
-            std::atomic<size_t>& ref_count) noexcept
+            std::atomic<TRefCount>& ref_count) noexcept
             : address_(handle.address())
             , ref_count_(&ref_count)
         {
         }
 
-        explicit SharedCoroutineHandle(void* address, std::atomic<size_t>& ref_count) noexcept
+        explicit SharedCoroutineHandle(void* address, std::atomic<TRefCount>& ref_count) noexcept
             : address_(address)
             , ref_count_(&ref_count)
         {
@@ -130,7 +132,7 @@ namespace rg
             return handle.promise();
         }
 
-        std::atomic<size_t>* use_count_ptr() const noexcept
+        std::atomic<TRefCount>* use_count_ptr() const noexcept
         {
             return ref_count_;
         }
@@ -138,7 +140,7 @@ namespace rg
 
     private:
         void* address_; // Raw pointer to the coroutine handle
-        std::atomic<size_t>* ref_count_; // Pointer to the thread-safe reference count
+        std::atomic<TRefCount>* ref_count_; // Pointer to the thread-safe reference count
 
         void destroy_coroutine()
         {

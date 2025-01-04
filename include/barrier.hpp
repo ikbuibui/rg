@@ -34,7 +34,8 @@ namespace rg
 
     struct BarrierQueue
     {
-        using barrier_tuple = std::tuple<std::coroutine_handle<>, std::atomic<size_t>*, bool*>;
+        using barrier_tuple
+            = std::tuple<std::coroutine_handle<>, std::atomic<SharedCoroutineHandle::TRefCount>*, bool*>;
 
         std::vector<barrier_tuple> queue;
         mutable std::mutex mtx;

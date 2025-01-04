@@ -39,7 +39,7 @@ namespace rg
             // If coro not done, add h to its waiter handle and it will be done in final suspend
             // if coro is done, we can simply resume h
             coro.promise<AwaitedPromise>().continuationHandle = h;
-            uint32_t expectedState = 1;
+            uint16_t expectedState = 1;
             coro.promise<AwaitedPromise>().workingState.compare_exchange_strong(expectedState, 2);
             // return true to suspend if expected state is 1
             return expectedState != 0;
@@ -83,10 +83,10 @@ namespace rg
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
-            std::atomic<uint32_t> workingState = 1;
+            std::atomic<uint16_t> waitCounter{INVALID_WAIT_STATE};
+            std::atomic<uint16_t> workingState = 1;
             // not incremented in constructor of shared handle
-            std::atomic<size_t> sharedOwnerCounter{1u};
+            std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
 
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
@@ -137,7 +137,7 @@ namespace rg
 
             FinalDelete final_suspend() noexcept
             {
-                uint32_t expectedState = 1;
+                uint16_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
                 // contHandle has been pushed already
                 if(expectedState == 2)
@@ -280,10 +280,10 @@ namespace rg
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
-            std::atomic<uint32_t> workingState = 1;
+            std::atomic<uint16_t> waitCounter{INVALID_WAIT_STATE};
+            std::atomic<uint16_t> workingState = 1;
             // not incremented in constructor of shared handle
-            std::atomic<size_t> sharedOwnerCounter{1u};
+            std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
             std::coroutine_handle<> continuationHandle{nullptr};
@@ -332,7 +332,7 @@ namespace rg
             FinalDelete final_suspend() noexcept
             {
                 // get is never called, but void tasks may be called synchronously
-                uint32_t expectedState = 1;
+                uint16_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
                 // contHandle has been pushed already
                 if(expectedState == 2)

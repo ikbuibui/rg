@@ -49,7 +49,7 @@ namespace rg
             // does this need to be optional?
             std::optional<T> result = std::nullopt;
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            // std::atomic<uint32_t> waitCounter = 0;
+            // std::atomic<uint16_t> waitCounter = 0;
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
             std::coroutine_handle<> continuationHandle = nullptr;
@@ -60,7 +60,7 @@ namespace rg
             std::condition_variable cv;
             SharedCoroutineHandle self;
             // not incremented in constructor of shared handle
-            std::atomic<size_t> sharedOwnerCounter{1u};
+            std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
 
             bool task_done = false;
             bool all_done = false;
