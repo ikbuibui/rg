@@ -81,6 +81,7 @@ namespace rg
 
         // Add a task to the list, incremenets wait counter of task if task is not immidiately ready to run
         // TODO think about rvalue reference
+        // TODO think about returning somethin useful. Maybe bool telling if it is ready
         void add_task(task_access&& task)
         {
             // std::cout << "add task on node id : " << resource_uid << std::endl;

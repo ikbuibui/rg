@@ -183,6 +183,7 @@ namespace rg
         // can access coro because it this function is a friend
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
         auto& resourceNodes = handlePromise.resourceNodes;
+        auto& waitCounter = handlePromise.waitCounter;
         // this reserves too large a space, not all accessHandles are resources
         // resourceNodes.reserve(sizeof...(accessHandles));
         resourceNodes.reserve(resource_counter);
@@ -191,7 +192,7 @@ namespace rg
         // Fold expression only for handles satisfying HasAccessType
         (...,
          (
-             [&resourceNodes, &handle, &handlePromise](auto const& accessHandle)
+             [&resourceNodes, &handle, &waitCounter](auto const& accessHandle)
              {
                  if constexpr(HasAccessType<std::decay_t<decltype(accessHandle)>>)
                  {
@@ -201,14 +202,14 @@ namespace rg
                      userQueue->add_task(
                          {handle.coro.get_coroutine_handle(),
                           typename std::decay_t<decltype(accessHandle)>::access_type{},
-                          &handlePromise.waitCounter});
+                          &waitCounter});
                  }
              }(std::forward<ResourceAccess>(accessHandles))));
 
         // task is ready to be eaten after fetch sub.
         // This is to make sure all resources are registered before someone deregistering sends this to readyQueue
         // If it returns INVALID_WAIT_STATE, then resource are ready and we are responsible to consume it
-        auto wc = handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE);
+        auto wc = waitCounter.fetch_sub(INVALID_WAIT_STATE);
         bool resReady = (wc == INVALID_WAIT_STATE);
 
         // bool resReady = (handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE) == INVALID_WAIT_STATE);

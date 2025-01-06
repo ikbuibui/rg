@@ -29,21 +29,20 @@ namespace rg
         }
 
         template<typename T>
-        void processResource(Resource<T> const& resource, auto const& handle, auto& resourceNodes, auto& handlePromise)
+        void processResource(Resource<T> const& resource, auto const& handle, auto& resourceNodes, auto& waitCounter)
         {
             auto const& userQueue = resource.getUserQueue();
             resourceNodes.push_back(userQueue);
-            userQueue->add_task(
-                {handle.coro.get_coroutine_handle(), access::write::access_type{}, &handlePromise.waitCounter});
+            userQueue->add_task({handle.coro.get_coroutine_handle(), access::write::access_type{}, &waitCounter});
         }
 
         // Process a container of resources
         template<ResourceContainer RC>
-        void processResource(RC const& container, auto const& handle, auto& resourceNodes, auto& handlePromise)
+        void processResource(RC const& container, auto const& handle, auto& resourceNodes, auto& waitCounter)
         {
             for(auto const& resource : container)
             {
-                processResource(resource, handle, resourceNodes, handlePromise);
+                processResource(resource, handle, resourceNodes, waitCounter);
             }
         }
 
@@ -74,21 +73,18 @@ namespace rg
             // handlePromise.workingState = 2;
 
             auto& resourceNodes = handlePromise.resourceNodes;
+            auto& waitCounter = handlePromise.waitCounter;
             resourceNodes.reserve(sizeof...(ResArgs));
 
             std::apply(
-                [&resourceNodes, &handlePromise, &handle, this](auto const&... resources)
-                {
-                    ([&resources, &resourceNodes, &handlePromise, &handle, this]()
-                     { processResource(resources.get(), handle, resourceNodes, handlePromise); },
-                     ...);
-                },
+                [&resourceNodes, &waitCounter, &handle, this](auto const&... resources)
+                { (processResource(resources.get(), handle, resourceNodes, waitCounter), ...); },
                 resources);
 
             // task is ready to be eaten after fetch sub.
             // This is to make sure all resources are registered before someone deregistering sends this to readyQueue
             // If it returns INVALID_WAIT_STATE, then resource are ready and we are responsible to consume it
-            auto wc = handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE);
+            auto wc = waitCounter.fetch_sub(INVALID_WAIT_STATE);
             bool resourcesReady = (wc == INVALID_WAIT_STATE);
 
 
