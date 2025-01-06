@@ -1,7 +1,7 @@
 #pragma once
 
 // #include "MPMCQueue.hpp"
-#include "barrier.hpp"
+#include "BarrierQueue.hpp"
 #include "dequeue.hpp"
 #include "hwloc_ctx.hpp"
 #include "random.hpp"
@@ -32,6 +32,8 @@ namespace rg
         //     = boost::lockfree::stack<std::coroutine_handle<>, boost::lockfree::capacity<threadPoolStackSize>>;
         // using stack_type = rigtorp::MPMCQueue<std::coroutine_handle<>>;
         using stack_type = riften::Deque<std::coroutine_handle<>>;
+
+        template<typename... ResArgs>
         friend struct BarrierAwaiter;
 
     private:

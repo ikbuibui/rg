@@ -1,93 +1,111 @@
 #pragma once
 
-#include "SharedCoroutineHandle.hpp"
+#include "Task.hpp"
+#include "ThreadPool.hpp"
+#include "resources.hpp"
+#include "traits.hpp"
 
-#include <atomic>
 #include <coroutine>
-#include <cstddef>
-#include <mutex>
+#include <functional>
 #include <vector>
 
 namespace rg
 {
+    template<typename T>
+    concept ResourceContainer = requires(T container) {
+        typename T::value_type;
+        requires traits::is_specialization_of_v<Resource, typename T::value_type>;
+        { std::begin(container) } -> std::input_iterator;
+        { std::end(container) } -> std::input_iterator;
+    };
+
+    template<typename... ResArgs>
     struct BarrierAwaiter
     {
-        bool await_ready() noexcept
+        std::tuple<std::reference_wrapper<ResArgs const>...> resources;
+
+        BarrierAwaiter(ResArgs const&... args) : resources(std::ref(args)...)
+        {
+        }
+
+        template<typename T>
+        void processResource(Resource<T> const& resource, auto const& handle, auto& resourceNodes, auto& handlePromise)
+        {
+            auto const& userQueue = resource.getUserQueue();
+            resourceNodes.push_back(userQueue);
+            userQueue->add_task(
+                {handle.coro.get_coroutine_handle(), access::write::access_type{}, &handlePromise.waitCounter});
+        }
+
+        // Process a container of resources
+        template<ResourceContainer RC>
+        void processResource(RC const& container, auto const& handle, auto& resourceNodes, auto& handlePromise)
+        {
+            for(auto const& resource : container)
+            {
+                processResource(resource, handle, resourceNodes, handlePromise);
+            }
+        }
+
+        // always suspend
+        bool await_ready() const noexcept
         {
             return false;
         }
 
-        template<typename promise_type>
-        bool await_suspend(std::coroutine_handle<promise_type> h) noexcept
+        //  resources are not ready. add this continuation to handle and suspend
+        template<typename TPromise>
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> h) noexcept
         {
             // std::cout << "in barrier" << std::endl;
 
-            h.promise().pool_p->barrier_queue.emplace_back(h.promise().self, h.promise().coroOutsideTask);
-
-            return true;
-        }
-
-        void await_resume() noexcept
-        {
-        }
-    };
-
-    struct BarrierQueue
-    {
-        using barrier_tuple
-            = std::tuple<std::coroutine_handle<>, std::atomic<SharedCoroutineHandle::TRefCount>*, bool*>;
-
-        std::vector<barrier_tuple> queue;
-        mutable std::mutex mtx;
-
-        explicit BarrierQueue(std::size_t reserve_size = 4)
-        {
-            queue.reserve(reserve_size);
-        }
-
-        void emplace_back(SharedCoroutineHandle const& sharedHandle, bool& coroOutsideTask)
-        {
-            std::lock_guard<std::mutex> lock(mtx);
-            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle.use_count_ptr(), &coroOutsideTask);
-        }
-
-        // Iterate, remove elements with zero atomic value, and return their coroutine handles
-        template<typename ThreadPool>
-        void process_and_extract(ThreadPool* pool)
-        {
-            std::lock_guard<std::mutex> lock(mtx);
-
-            // check if the barrier is ready
-            // use count of 1, since parent task holds self. All children are done if use count - num handles = 1
-            auto is_ready = [](barrier_tuple const& tuple) { return *std::get<1>(tuple) - *std::get<2>(tuple) == 1; };
-
-            // Remove elements with zero atomic value and collect their coroutine handles
-            auto it = queue.begin();
-            while(it != queue.end())
+            auto handle = [](std::coroutine_handle<TPromise> continuation) -> rg::Task<void>
             {
-                if(is_ready(*it))
+                auto& promise = continuation.promise();
+                promise.pool_p->barrier_queue.emplace_back(promise.self, promise.coroOutsideTask);
+                co_return;
+            }(h);
+
+            // can access coro because it this function is a friend
+            auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
+
+            // continuatiom handled by adding to barrier queue
+            // handlePromise.continuationHandle = h;
+            // handlePromise.workingState = 2;
+
+            auto& resourceNodes = handlePromise.resourceNodes;
+            resourceNodes.reserve(sizeof...(ResArgs));
+
+            std::apply(
+                [&resourceNodes, &handlePromise, &handle, this](auto const&... resources)
                 {
-                    pool->addTask(std::get<0>(*it));
-                    it = queue.erase(it); // Remove from queue
-                }
-                else
-                {
-                    ++it; // Move to the next element
-                }
+                    ([&resources, &resourceNodes, &handlePromise, &handle, this]()
+                     { processResource(resources.get(), handle, resourceNodes, handlePromise); },
+                     ...);
+                },
+                resources);
+
+            // task is ready to be eaten after fetch sub.
+            // This is to make sure all resources are registered before someone deregistering sends this to readyQueue
+            // If it returns INVALID_WAIT_STATE, then resource are ready and we are responsible to consume it
+            auto wc = handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE);
+            bool resourcesReady = (wc == INVALID_WAIT_STATE);
+
+
+            // we are responsible to execute the task
+            if(resourcesReady)
+            {
+                return handle.coro.get_coroutine_handle();
+            }
+            // task was blocked initially and was/will be asynchronously executed
+            else
+            {
+                return std::noop_coroutine();
             }
         }
 
-        bool empty() const
+        void await_resume() const noexcept
         {
-            std::lock_guard<std::mutex> lock(mtx);
-            return queue.empty();
-        }
-
-        std::size_t size() const
-        {
-            std::lock_guard<std::mutex> lock(mtx);
-            return queue.size();
         }
     };
-
 } // namespace rg

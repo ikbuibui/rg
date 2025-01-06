@@ -69,6 +69,9 @@ namespace rg
         template<typename U, bool Synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
+        template<typename... ResArgs>
+        friend struct BarrierAwaiter;
+
         template<bool Synchronous, bool finishedOnReturn, typename Callable, typename... ResourceAccess>
         friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
@@ -266,6 +269,9 @@ namespace rg
 
         template<typename U, bool Synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
+
+        template<typename... ResArgs>
+        friend struct BarrierAwaiter;
 
         template<bool Synchronous, bool finishedOnReturn, typename Callable, typename... ResourceAccess>
         friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
