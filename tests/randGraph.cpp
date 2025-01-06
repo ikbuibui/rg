@@ -110,7 +110,7 @@ auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
         {
         case 0:
             {
-                co_await rg::dispatch_task<false, true>(
+                co_await rg::dispatch_task<false, false>(
                     []() -> rg::Task<void>
                     {
                         sleep(task_duration);
