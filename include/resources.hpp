@@ -288,7 +288,7 @@ namespace rg
             return resource.get().getUserQueue()->getId();
         }
 
-        std::shared_ptr<ResourceNode> getUserQueue() const
+        std::shared_ptr<ResourceNode> const& getUserQueue() const
         {
             return resource.get().getUserQueue();
         }
@@ -320,7 +320,7 @@ namespace rg
             // std::cout << "Default construct T" << std::endl;
         }
 
-        std::shared_ptr<ResourceNode> getUserQueue() const
+        std::shared_ptr<ResourceNode> const& getUserQueue() const
         {
             return userQueue;
         }

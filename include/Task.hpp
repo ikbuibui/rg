@@ -8,7 +8,6 @@
 
 #include <atomic>
 #include <coroutine>
-#include <cstddef>
 #include <optional>
 
 namespace rg
@@ -75,6 +74,7 @@ namespace rg
 
         struct promise_type
         {
+            using return_type = T;
             // TODO think should I hold this in task
 
             // initialized in await_transform of parent coroutine
@@ -272,6 +272,7 @@ namespace rg
 
         struct promise_type
         {
+            using return_type = void;
             // TODO think should I hold this in task
 
             // initialized in await_transform of parent coroutine

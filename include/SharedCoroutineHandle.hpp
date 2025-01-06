@@ -3,7 +3,6 @@
 #include <atomic>
 #include <cassert>
 #include <coroutine>
-#include <cstddef>
 #include <stdexcept>
 
 namespace rg

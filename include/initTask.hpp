@@ -44,6 +44,8 @@ namespace rg
     {
         struct promise_type
         {
+            using return_type = T;
+
             // initialized in await_transform of parent coroutine
             ThreadPool* pool_p{};
             // does this need to be optional?

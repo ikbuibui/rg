@@ -59,12 +59,16 @@ namespace rg
             }
         }
 
-        // passes the return object
-        // TODO add return type
         auto await_resume() const noexcept
         {
-            // return value
-            return handle.coro.template promise<typename T::promise_type>().result.value();
+            if constexpr(std::is_void_v<typename T::promise_type::return_type>)
+            {
+                return;
+            }
+            else
+            {
+                return handle.coro.template promise<typename T::promise_type>().result.value();
+            }
         }
     };
 
@@ -191,9 +195,10 @@ namespace rg
              {
                  if constexpr(HasAccessType<std::decay_t<decltype(accessHandle)>>)
                  {
-                     resourceNodes.push_back(accessHandle.getUserQueue());
+                     auto const& userQueue = accessHandle.getUserQueue();
+                     resourceNodes.push_back(userQueue);
 
-                     accessHandle.getUserQueue()->add_task(
+                     userQueue->add_task(
                          {handle.coro.get_coroutine_handle(),
                           typename std::decay_t<decltype(accessHandle)>::access_type{},
                           &handlePromise.waitCounter});
