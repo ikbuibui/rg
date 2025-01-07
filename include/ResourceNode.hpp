@@ -105,26 +105,24 @@ namespace rg
                     lastTask = tasks.insert_after(lastTask, task);
                     // set to end all the time since end might change after adding a task
                     firstNotReady = tasks.end();
+                    return;
+                }
+                // check if some ready task blocks me
+                if(isSerial(task.accessMode, tasks.cbegin()->accessMode))
+                {
+                    // someone is blocking, add and wait
+                    // std::cout << "soemone is blocking" << std::endl;
+                    lastTask = tasks.insert_after(lastTask, task);
+                    firstNotReady = lastTask;
+                    ++*task.waitCounter_p;
                 }
                 else
                 {
-                    // check if some ready task blocks me
-                    if(isSerial(task.accessMode, tasks.cbegin()->accessMode))
-                    {
-                        // someone is blocking, add and wait
-                        // std::cout << "soemone is blocking" << std::endl;
-                        lastTask = tasks.insert_after(lastTask, task);
-                        firstNotReady = lastTask;
-                        ++*task.waitCounter_p;
-                    }
-                    else
-                    {
-                        //  no one is blocking. Add as ready
-                        // std::cout << "no one blocking" << std::endl;
-                        lastTask = tasks.insert_after(lastTask, task);
-                        // set to end all the time since end might change after adding a task
-                        firstNotReady = tasks.end();
-                    }
+                    //  no one is blocking. Add as ready
+                    // std::cout << "no one blocking" << std::endl;
+                    lastTask = tasks.insert_after(lastTask, task);
+                    // set to end all the time since end might change after adding a task
+                    firstNotReady = tasks.end();
                 }
             }
             else
@@ -161,11 +159,10 @@ namespace rg
                     {
                         lastTask = first;
                     }
-                    auto oldAccessMode = next->accessMode;
                     tasks.erase_after(first);
                     // erased after first.
                     // We have a new next. No need to increment first
-                    update_ready(oldAccessMode, pool_p);
+                    update_ready(pool_p);
                 }
                 else
                 {
@@ -196,47 +193,40 @@ namespace rg
         // THINK ABOUT THIS PROPERTY. It holds for read write resources
         // TODO think of mutexes. Update, add,remove and checkBlocking
         // returns handle if it can be resumed,
-        void update_ready(typename task_access::AccessModes old_access_mode, ThreadPool* pool_p)
+        void update_ready(ThreadPool* pool_p)
         {
-            if(firstNotReady == tasks.end())
+            auto first = tasks.begin();
+            if(firstNotReady == tasks.end() || firstNotReady != first)
             {
                 return;
             }
             // can only start seting tasks ready if firstNotReady reaches first position
-            auto first = tasks.begin();
-            if(firstNotReady == first)
+            if(--*(firstNotReady->waitCounter_p) == 0)
             {
-                if(--*(firstNotReady->waitCounter_p) == 0)
-                {
-                    // move handle to ready tasks queue
-                    pool_p->addTask(firstNotReady->handle);
-                }
-                firstNotReady++;
-                auto first_accessMode = first->accessMode;
-                while(firstNotReady != tasks.end())
-                {
-                    if(isSerial(firstNotReady->accessMode, first_accessMode))
-                    {
-                        // Stop when a serial access is found
-                        break;
-                    }
-                    else
-                    {
-                        if(--*(firstNotReady->waitCounter_p) == 0)
-                        {
-                            // move handle to ready tasks queue
-                            pool_p->addTask(firstNotReady->handle);
-                        }
-                        firstNotReady++;
-                    }
-                }
-                return;
+                // move handle to ready tasks queue
+                pool_p->addTask(firstNotReady->handle);
             }
-            // some ready tasks still working, firstNotReady is still blocked
-            else
+            firstNotReady++;
+            auto first_accessMode = first->accessMode;
+            auto last = tasks.end();
+            while(firstNotReady != last)
             {
-                return;
+                if(isSerial(firstNotReady->accessMode, first_accessMode))
+                {
+                    // Stop when a serial access is found
+                    break;
+                }
+                else
+                {
+                    if(--*(firstNotReady->waitCounter_p) == 0)
+                    {
+                        // move handle to ready tasks queue
+                        pool_p->addTask(firstNotReady->handle);
+                    }
+                    firstNotReady++;
+                }
             }
+            return;
         }
     };
 } // namespace rg
