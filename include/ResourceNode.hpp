@@ -174,15 +174,9 @@ namespace rg
 
 
     private:
-        bool isSerial(typename task_access::AccessModes x, typename task_access::AccessModes y)
+        bool isSerial(typename task_access::AccessModes const& x, typename task_access::AccessModes const& y)
         {
-            return std::visit(
-                [](auto const& lhs, auto const& rhs)
-                {
-                    return is_serial_access(lhs, rhs); // Calls processAccess with the extracted types
-                },
-                x,
-                y);
+            return std::visit([](auto const& lhs, auto const& rhs) { return is_serial_access(lhs, rhs); }, x, y);
         }
 
         // TODO think about using const iterators
