@@ -97,23 +97,34 @@ namespace rg
             if(firstNotReady == tasks.end())
             {
                 // all previous tasks are ready
-                // check if some ready task blocks me
-                auto it = check_blocking(tasks.cbegin(), firstNotReady, task);
-                if(it != firstNotReady)
+                // no tasks in queue
+                // Add as ready
+                if(firstNotReady == tasks.begin())
                 {
-                    // someone is blocking, add and wait
-                    // std::cout << "soemone is blocking" << std::endl;
-                    lastTask = tasks.insert_after(lastTask, task);
-                    firstNotReady = lastTask;
-                    ++*task.waitCounter_p;
-                }
-                else
-                {
-                    //  no one is blocking. Add as ready
-                    // std::cout << "no one blocking" << std::endl;
+                    // std::cout << "empty queue" << std::endl;
                     lastTask = tasks.insert_after(lastTask, task);
                     // set to end all the time since end might change after adding a task
                     firstNotReady = tasks.end();
+                }
+                else
+                {
+                    // check if some ready task blocks me
+                    if(isSerial(task.accessMode, tasks.cbegin()->accessMode))
+                    {
+                        // someone is blocking, add and wait
+                        // std::cout << "soemone is blocking" << std::endl;
+                        lastTask = tasks.insert_after(lastTask, task);
+                        firstNotReady = lastTask;
+                        ++*task.waitCounter_p;
+                    }
+                    else
+                    {
+                        //  no one is blocking. Add as ready
+                        // std::cout << "no one blocking" << std::endl;
+                        lastTask = tasks.insert_after(lastTask, task);
+                        // set to end all the time since end might change after adding a task
+                        firstNotReady = tasks.end();
+                    }
                 }
             }
             else
@@ -179,71 +190,53 @@ namespace rg
             return std::visit([](auto const& lhs, auto const& rhs) { return is_serial_access(lhs, rhs); }, x, y);
         }
 
-        // TODO think about using const iterators
-        // checks if someone between first and last blocks task
-        // TODO this is a find_if
-        // returns iterator to person who blocks or to the last if no one blocks
-        // assumes there is atleast one element backwards because of where it is called from
-        typename std::forward_list<task_access>::const_iterator check_blocking(
-            typename std::forward_list<task_access>::const_iterator first,
-            typename std::forward_list<task_access>::const_iterator last,
-            task_access const& task)
-        {
-            while(first != last)
-            {
-                if(isSerial(task.accessMode, first->accessMode))
-                {
-                    // Stop when a serial access is found
-                    break;
-                }
-                first++;
-            }
-            return first;
-        }
-
         // task_access has been modified or deleted
         // starting from the firstNotReady task, check if task can be set to ready
+        // Assumes if a task is blocked all future tasks will be blocked. Not true for area resources
+        // THINK ABOUT THIS PROPERTY. It holds for read write resources
         // TODO think of mutexes. Update, add,remove and checkBlocking
         // returns handle if it can be resumed,
         void update_ready(typename task_access::AccessModes old_access_mode, ThreadPool* pool_p)
         {
-            auto it = firstNotReady;
-            // try to update all not ready tasks in order
-            while(it != tasks.end())
+            if(firstNotReady == tasks.end())
             {
-                // modified_task was blocking it
-                if(isSerial(old_access_mode, it->accessMode))
+                return;
+            }
+            // can only start seting tasks ready if firstNotReady reaches first position
+            auto first = tasks.begin();
+            if(firstNotReady == first)
+            {
+                if(--*(firstNotReady->waitCounter_p) == 0)
                 {
-                    // TODO think about splitting it up into begin -> firstNotReady and from firstNotReady to it
-                    if(check_blocking(tasks.cbegin(), it, *it) != it)
+                    // move handle to ready tasks queue
+                    pool_p->addTask(firstNotReady->handle);
+                }
+                firstNotReady++;
+                auto first_accessMode = first->accessMode;
+                while(firstNotReady != tasks.end())
+                {
+                    if(isSerial(firstNotReady->accessMode, first_accessMode))
                     {
-                        // someone else is also blocking it
-                        // dont set to ready
+                        // Stop when a serial access is found
                         break;
                     }
                     else
                     {
-                        // std::cout << "decrement wait counter" << std::endl;
-                        // no one else is blocking
-                        // set to ready
-                        if(--*(it->waitCounter_p) == 0)
+                        if(--*(firstNotReady->waitCounter_p) == 0)
                         {
                             // move handle to ready tasks queue
-                            pool_p->addTask(it->handle);
+                            pool_p->addTask(firstNotReady->handle);
                         }
-                        it++;
+                        firstNotReady++;
                     }
                 }
-                // modified task wasnt blocking it
-                else
-                {
-                    // nothing to update, it wasn't blocked by modified task
-                    // the ones who block must unblock
-                    break;
-                }
+                return;
             }
-            // it points one past the last ready task
-            firstNotReady = it;
+            // some ready tasks still working, firstNotReady is still blocked
+            else
+            {
+                return;
+            }
         }
     };
 } // namespace rg
