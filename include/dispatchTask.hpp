@@ -200,9 +200,7 @@ namespace rg
                      resourceNodes.push_back(userQueue);
 
                      userQueue->add_task(
-                         {handle.coro.get_coroutine_handle(),
-                          typename std::decay_t<decltype(accessHandle)>::access_type{},
-                          &waitCounter});
+                         {handle.coro.get_coroutine_handle(), accessHandle.getAccessMode(), &waitCounter});
                  }
              }(std::forward<ResourceAccess>(accessHandles))));
 

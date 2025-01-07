@@ -19,20 +19,18 @@ namespace rg
 
     struct task_access
     {
-        using AccessModes = std::variant<access::read, access::write>;
-
         // TODO deal with type erasure, need to call promise
         std::coroutine_handle<> handle; // Coroutine handle
         // std::reference_wrapper<std::type_info const> access_mode; // Type information
         std::atomic<uint16_t>* waitCounter_p{};
-        AccessModes accessMode;
+        AccessMode accessMode;
 
         // TODO try passing T as parameter and then constructing
         template<typename TAccess>
-        task_access(std::coroutine_handle<> coro_handle, TAccess mode, std::atomic<uint16_t>* waitCtr_p)
+        task_access(std::coroutine_handle<> coro_handle, TAccess&& mode, std::atomic<uint16_t>* waitCtr_p)
             : handle(coro_handle)
             , waitCounter_p{waitCtr_p}
-            , accessMode(mode)
+            , accessMode(std::forward<TAccess>(mode))
         {
         }
 
@@ -43,9 +41,9 @@ namespace rg
         // }
 
         // TODO think about default access mode and waitPtr
-        task_access() : handle(nullptr)
-        {
-        }
+        // task_access() : handle(nullptr)
+        // {
+        // }
 
         // task_access() : handle(nullptr), access_mode(typeid(void))
         // {
@@ -108,7 +106,7 @@ namespace rg
                     return;
                 }
                 // check if some ready task blocks me
-                if(isSerial(task.accessMode, tasks.cbegin()->accessMode))
+                if(is_serial_access(task.accessMode, tasks.cbegin()->accessMode))
                 {
                     // someone is blocking, add and wait
                     // std::cout << "soemone is blocking" << std::endl;
@@ -182,11 +180,6 @@ namespace rg
 
 
     private:
-        bool isSerial(typename task_access::AccessModes const& x, typename task_access::AccessModes const& y)
-        {
-            return std::visit([](auto const& lhs, auto const& rhs) { return is_serial_access(lhs, rhs); }, x, y);
-        }
-
         // task_access has been modified or deleted
         // starting from the firstNotReady task, check if task can be set to ready
         // Assumes if a task is blocked all future tasks will be blocked. Not true for area resources
@@ -211,7 +204,7 @@ namespace rg
             auto last = tasks.end();
             while(firstNotReady != last)
             {
-                if(isSerial(firstNotReady->accessMode, first_accessMode))
+                if(is_serial_access(firstNotReady->accessMode, first_accessMode))
                 {
                     // Stop when a serial access is found
                     break;

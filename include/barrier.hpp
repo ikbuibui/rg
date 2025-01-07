@@ -33,7 +33,7 @@ namespace rg
         {
             auto const& userQueue = resource.getUserQueue();
             resourceNodes.push_back(userQueue);
-            userQueue->add_task({handle.coro.get_coroutine_handle(), access::write::access_type{}, &waitCounter});
+            userQueue->add_task({handle.coro.get_coroutine_handle(), AccessMode::Write, &waitCounter});
         }
 
         // Process a container of resources

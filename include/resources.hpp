@@ -10,29 +10,13 @@
 
 namespace rg
 {
-    namespace access
+    enum class AccessMode : uint8_t
     {
-        struct read
-        {
-            using access_type = read;
-        };
-
-        struct write
-        {
-            using access_type = write;
-        };
-
-        struct aadd
-        {
-            using access_type = aadd;
-        };
-
-        struct amul
-        {
-            using access_type = amul;
-        };
-
-    } // namespace access
+        Read,
+        Write,
+        AAdd,
+        AMul,
+    };
 
     namespace range_access
     {
@@ -149,16 +133,11 @@ namespace rg
     concept NotAccessType = !HasAccessType<T>;
 
     // TODO think one for IOResources and another for others?
-    template<HasAccessType A, HasAccessType B>
-    bool is_serial_access(A const&, B const&)
+    bool is_serial_access(AccessMode a, AccessMode b)
     {
-        using AccessA = typename A::access_type;
-        using AccessB = typename B::access_type;
-
-        return !static_cast<bool>(
-            (std::is_same_v<AccessA, access::read> && std::is_same_v<AccessB, access::read>)
-            || (std::is_same_v<AccessA, access::aadd> && std::is_same_v<AccessB, access::aadd>)
-            || (std::is_same_v<AccessA, access::amul> && std::is_same_v<AccessB, access::amul>) );
+        return !(
+            (a == AccessMode::Read && b == AccessMode::Read) || (a == AccessMode::AAdd && b == AccessMode::AAdd)
+            || (a == AccessMode::AMul && b == AccessMode::AMul));
     }
 
     // Function to bind Combined value to a callable
@@ -252,18 +231,19 @@ namespace rg
     // forward declaration to hold shared pointer
     struct ResourceNode;
 
-    template<typename TRes, typename AccessMode>
+    template<typename TRes>
     class ResourceAccess
     {
     private:
         std::reference_wrapper<TRes> resource;
+        AccessMode accessMode;
 
     public:
-        using access_type = typename AccessMode::access_type;
+        using access_type = AccessMode;
 
         // using value_type = T&;
 
-        ResourceAccess(TRes& r) : resource(r)
+        ResourceAccess(TRes& r, AccessMode access) : resource(r), accessMode(access)
         {
         }
 
@@ -291,6 +271,11 @@ namespace rg
         std::shared_ptr<ResourceNode> const& getUserQueue() const
         {
             return resource.get().getUserQueue();
+        }
+
+        AccessMode const& getAccessMode() const
+        {
+            return accessMode;
         }
     };
 
@@ -350,15 +335,15 @@ namespace rg
         }
 
         // Read accessor
-        ResourceAccess<Resource const, access::read> rg_read() const
+        ResourceAccess<Resource const> rg_read() const
         {
-            return {*this};
+            return {*this, AccessMode::Read};
         }
 
         // Write  accessor
-        ResourceAccess<Resource, access::write> rg_write()
+        ResourceAccess<Resource> rg_write()
         {
-            return {*this};
+            return {*this, AccessMode::Write};
         }
     };
 
