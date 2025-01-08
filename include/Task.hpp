@@ -47,7 +47,7 @@ namespace rg
         // will only be called after the task is done
         auto await_resume() const noexcept
         {
-            auto result = coro.promise<AwaitedPromise>().result.value();
+            auto result = coro.promise<AwaitedPromise>().result;
             coro.promise<AwaitedPromise>().coroOutsideTask = false;
             return result;
         }
@@ -104,7 +104,7 @@ namespace rg
             // hold res in vector to deregister later
             std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
             // does this need to be optional?
-            std::optional<T> result = std::nullopt;
+            T result;
             // true as the return object is always created
             bool coroOutsideTask = true;
 

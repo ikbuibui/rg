@@ -67,7 +67,7 @@ namespace rg
             }
             else
             {
-                return handle.coro.template promise<typename T::promise_type>().result.value();
+                return handle.coro.template promise<typename T::promise_type>().result;
             }
         }
     };
