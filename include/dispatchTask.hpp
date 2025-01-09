@@ -7,6 +7,7 @@
 #include <cmath>
 #include <coroutine>
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 namespace rg

@@ -8,7 +8,6 @@
 
 #include <atomic>
 #include <coroutine>
-#include <optional>
 
 namespace rg
 {
@@ -80,8 +79,6 @@ namespace rg
             using return_type = T;
             // TODO think should I hold this in task
 
-            // initialized in await_transform of parent coroutine
-            ThreadPool* pool_p{};
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
@@ -90,6 +87,8 @@ namespace rg
             std::atomic<uint16_t> workingState = 1;
             // not incremented in constructor of shared handle
             std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
+            // initialized in await_transform of parent coroutine
+            ThreadPool* pool_p{};
 
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
@@ -110,11 +109,14 @@ namespace rg
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
-            // template<typename... Args>
-            // promise_type(Args...)
-            //     : self{SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this))}
-            // {
-            // }
+            template<typename... Args>
+            promise_type(Args...)
+                : self{SharedCoroutineHandle(
+                      std::coroutine_handle<promise_type>::from_promise(*this),
+                      sharedOwnerCounter)}
+            {
+            }
+
             ~promise_type()
             { // deregister from resources
                 std::ranges::for_each(
@@ -125,9 +127,6 @@ namespace rg
 
             Task get_return_object()
             {
-                self = SharedCoroutineHandle(
-                    std::coroutine_handle<promise_type>::from_promise(*this),
-                    sharedOwnerCounter);
                 return Task{self};
             }
 
@@ -308,11 +307,14 @@ namespace rg
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
-            // template<typename... Args>
-            // promise_type(Args...)
-            //     : self{SharedCoroutineHandle(std::coroutine_handle<promise_type>::from_promise(*this))}
-            // {
-            // }
+            template<typename... Args>
+            promise_type(Args...)
+                : self{SharedCoroutineHandle(
+                      std::coroutine_handle<promise_type>::from_promise(*this),
+                      sharedOwnerCounter)}
+            {
+            }
+
             ~promise_type()
             { // deregister from resources
                 std::ranges::for_each(
@@ -323,9 +325,6 @@ namespace rg
 
             Task get_return_object()
             {
-                self = SharedCoroutineHandle(
-                    std::coroutine_handle<promise_type>::from_promise(*this),
-                    sharedOwnerCounter);
                 return Task{self};
             }
 
