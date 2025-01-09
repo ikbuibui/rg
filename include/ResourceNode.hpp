@@ -22,12 +22,12 @@ namespace rg
         // TODO deal with type erasure, need to call promise
         std::coroutine_handle<> handle; // Coroutine handle
         // std::reference_wrapper<std::type_info const> access_mode; // Type information
-        std::atomic<uint16_t>* waitCounter_p{};
+        std::atomic<uint32_t>* waitCounter_p{};
         AccessMode accessMode;
 
         // TODO try passing T as parameter and then constructing
         template<typename TAccess>
-        task_access(std::coroutine_handle<> coro_handle, TAccess&& mode, std::atomic<uint16_t>* waitCtr_p)
+        task_access(std::coroutine_handle<> coro_handle, TAccess&& mode, std::atomic<uint32_t>* waitCtr_p)
             : handle(coro_handle)
             , waitCounter_p{waitCtr_p}
             , accessMode(std::forward<TAccess>(mode))

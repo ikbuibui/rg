@@ -37,7 +37,7 @@ namespace rg
             // If coro not done, add h to its waiter handle and it will be done in final suspend
             // if coro is done, we can simply resume h
             coro.promise<AwaitedPromise>().continuationHandle = h;
-            uint16_t expectedState = 1;
+            uint32_t expectedState = 1;
             coro.promise<AwaitedPromise>().workingState.compare_exchange_strong(expectedState, 2);
             // return true to suspend if expected state is 1
             return expectedState != 0;
@@ -77,16 +77,18 @@ namespace rg
         struct promise_type
         {
             using return_type = T;
-            // TODO think should I hold this in task
 
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            std::atomic<uint16_t> waitCounter{INVALID_WAIT_STATE};
-            std::atomic<uint16_t> workingState = 1;
+            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             // not incremented in constructor of shared handle
-            std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
+            alignas(hardware_destructive_interference_size)
+                std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
+            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState = 1;
+
+            // TODO think should I hold this in task
             // initialized in await_transform of parent coroutine
             ThreadPool* pool_p{};
 
@@ -139,7 +141,7 @@ namespace rg
 
             FinalDelete final_suspend() noexcept
             {
-                uint16_t expectedState = 1;
+                uint32_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
                 // contHandle has been pushed already
                 if(expectedState == 2)
@@ -278,18 +280,20 @@ namespace rg
         struct promise_type
         {
             using return_type = void;
-            // TODO think should I hold this in task
 
-            // initialized in await_transform of parent coroutine
-            ThreadPool* pool_p{};
             // needs to be atomic. multiple threads will change this if deregistering from resources together
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            std::atomic<uint16_t> waitCounter{INVALID_WAIT_STATE};
-            std::atomic<uint16_t> workingState = 1;
+            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
             // not incremented in constructor of shared handle
-            std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
+            alignas(hardware_destructive_interference_size)
+                std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
+            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState = 1;
+
+            // TODO think should I hold this in task
+            // initialized in await_transform of parent coroutine
+            ThreadPool* pool_p{};
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
             std::coroutine_handle<> continuationHandle{nullptr};
@@ -338,7 +342,7 @@ namespace rg
             FinalDelete final_suspend() noexcept
             {
                 // get is never called, but void tasks may be called synchronously
-                uint16_t expectedState = 1;
+                uint32_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
                 // contHandle has been pushed already
                 if(expectedState == 2)

@@ -36,7 +36,7 @@ namespace rg
         std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> h) const noexcept
         {
             handle.coro.template promise<typename T::promise_type>().continuationHandle = h;
-            uint16_t expectedState = 1;
+            uint32_t expectedState = 1;
             handle.coro.template promise<typename T::promise_type>().workingState.compare_exchange_strong(
                 expectedState,
                 2);
