@@ -91,7 +91,7 @@ namespace rg
             address_ = nullptr;
             ref_count_ = nullptr;
 
-            if(local_ref_count_copy && local_ref_count_copy->fetch_sub(1) == 1)
+            if(local_ref_count_copy && local_ref_count_copy->fetch_sub(1, std::memory_order_acq_rel) == 1)
             {
                 std::coroutine_handle<>::from_address(local_address_copy).destroy();
             }
