@@ -208,7 +208,7 @@ namespace rg
         // task is ready to be eaten after fetch sub.
         // This is to make sure all resources are registered before someone deregistering sends this to readyQueue
         // If it returns INVALID_WAIT_STATE, then resource are ready and we are responsible to consume it
-        auto wc = waitCounter.fetch_sub(INVALID_WAIT_STATE);
+        auto wc = waitCounter.fetch_sub(INVALID_WAIT_STATE, std::memory_order_acq_rel);
         bool resReady = (wc == INVALID_WAIT_STATE);
 
         // bool resReady = (handlePromise.waitCounter.fetch_sub(INVALID_WAIT_STATE) == INVALID_WAIT_STATE);

@@ -112,7 +112,7 @@ namespace rg
                     // std::cout << "soemone is blocking" << std::endl;
                     lastTask = tasks.insert_after(lastTask, task);
                     firstNotReady = lastTask;
-                    ++*task.waitCounter_p;
+                    task.waitCounter_p->fetch_add(1, std::memory_order_relaxed);
                 }
                 else
                 {
@@ -129,7 +129,7 @@ namespace rg
 
                 lastTask = tasks.insert_after(lastTask, task);
                 // firstNotReady stays the same
-                ++*task.waitCounter_p;
+                task.waitCounter_p->fetch_add(1, std::memory_order_relaxed);
                 // there is a not ready task before us, so we cannot be ready. Add and wait
             }
         }
@@ -194,7 +194,7 @@ namespace rg
                 return;
             }
             // can only start seting tasks ready if firstNotReady reaches first position
-            if(--*(firstNotReady->waitCounter_p) == 0)
+            if(firstNotReady->waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
             {
                 // move handle to ready tasks queue
                 pool_p->addTask(firstNotReady->handle);
@@ -211,7 +211,7 @@ namespace rg
                 }
                 else
                 {
-                    if(--*(firstNotReady->waitCounter_p) == 0)
+                    if(firstNotReady->waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         // move handle to ready tasks queue
                         pool_p->addTask(firstNotReady->handle);
