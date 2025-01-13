@@ -160,7 +160,6 @@ namespace rg
                     tasks.erase_after(first);
                     // erased after first.
                     // We have a new next. No need to increment first
-                    update_ready(pool_p);
                 }
                 else
                 {
@@ -168,6 +167,12 @@ namespace rg
                 }
                 next = std::next(first);
             }
+            if(firstNotReady == tasks.begin())
+            {
+                // only call if ready tasks are finished
+                update_ready(pool_p);
+            }
+
             return tasks.empty();
         }
 
@@ -182,14 +187,15 @@ namespace rg
     private:
         // task_access has been modified or deleted
         // starting from the firstNotReady task, check if task can be set to ready
+        // precondition : There are no already running tasks, i.e. firstNotReady is tasks.begin()
         // Assumes if a task is blocked all future tasks will be blocked. Not true for area resources
         // THINK ABOUT THIS PROPERTY. It holds for read write resources
         // TODO think of mutexes. Update, add,remove and checkBlocking
         // returns handle if it can be resumed,
         void update_ready(ThreadPool* pool_p)
         {
-            auto first = tasks.begin();
-            if(firstNotReady == tasks.end() || firstNotReady != first)
+            auto last = tasks.end();
+            if(firstNotReady == last)
             {
                 return;
             }
@@ -199,9 +205,8 @@ namespace rg
                 // move handle to ready tasks queue
                 pool_p->addTask(firstNotReady->handle);
             }
+            auto first_accessMode = firstNotReady->accessMode;
             firstNotReady++;
-            auto first_accessMode = first->accessMode;
-            auto last = tasks.end();
             while(firstNotReady != last)
             {
                 if(is_serial_access(firstNotReady->accessMode, first_accessMode))
