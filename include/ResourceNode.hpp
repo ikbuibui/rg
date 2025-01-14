@@ -174,9 +174,12 @@ namespace rg
                                std::memory_order_relaxed))
                         {
                             // we have taken over upadting
+                            bool found_completed_task_exit = false;
+
                             // cant use loaded fnr as we more ready tasks might be added and finished as we are
                             // removing stuff
-                            while(tasks[cur].remove_state == 1 && cur != firstNotReady.load(std::memory_order_acquire))
+                            while((found_completed_task_exit = (tasks[cur].remove_state == 1))
+                                  && cur != firstNotReady.load(std::memory_order_acquire))
                             {
                                 // TODO is it possible to move this into while loop?
                                 if(first.compare_exchange_strong(
@@ -192,7 +195,10 @@ namespace rg
                                 {
                                     return;
                                 }
-                                // TODO return if we found a remove state 0
+                            }
+                            if(!found_completed_task_exit)
+                            {
+                                return;
                             }
                         }
                         else
@@ -235,10 +241,12 @@ namespace rg
                     return;
                 }
             }
+            bool parallel_exit = false;
             do
             {
                 temp_last = last.load(std::memory_order_acquire);
-                while(fnr != temp_last && !is_serial_access(firstNewReadyMode, tasks[fnr].accessMode))
+                while(fnr != temp_last
+                      && (parallel_exit = !is_serial_access(firstNewReadyMode, tasks[fnr].accessMode)))
                 {
                     if(firstNotReady.compare_exchange_strong(
                            fnr,
@@ -258,7 +266,10 @@ namespace rg
                         return;
                     }
                 }
-                // TODO return early if exit was via a serial access
+                if(!parallel_exit)
+                {
+                    return;
+                }
             } while(temp_last != last.load(std::memory_order_acquire));
 
 
