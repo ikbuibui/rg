@@ -133,7 +133,7 @@ namespace rg
     concept NotAccessType = !HasAccessType<T>;
 
     // TODO think one for IOResources and another for others?
-    bool is_serial_access(AccessMode a, AccessMode b)
+    bool is_serial_access(AccessMode const a, AccessMode const b)
     {
         return !(
             (a == AccessMode::Read && b == AccessMode::Read) || (a == AccessMode::AAdd && b == AccessMode::AAdd)
