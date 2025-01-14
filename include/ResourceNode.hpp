@@ -85,17 +85,17 @@ namespace rg
         void add_task(task_access&& task)
         {
             // simply add the task to the end
-            auto old_last = last.load();
+            auto old_last = last.load(std::memory_order_acquire);
             tasks[old_last] = std::move(task);
             // Not updating wait counter here as it is an optimizaiton to do it drectly in dispatch task
             // Publish updated last to other threads
-            last.fetch_add(1);
+            last.fetch_add(1, std::memory_order_release);
 
             // add only needs to set tasks to ready if FNR is last, i.e. no not ready tasks
             // if FNR is not old_last here then
             // either fnr is at an older task than old_last, and we cant be ready
             // or fnr is at new last, and we dont need to do anything (other threads can already see the new last here)
-            auto fnr = firstNotReady.load();
+            auto fnr = firstNotReady.load(std::memory_order_acquire);
             if(fnr == old_last)
             {
                 // we take responsibility to update
@@ -103,9 +103,14 @@ namespace rg
                 // if empty or is parallel with previous task (prev task exists because not empty)
                 // we rely on short circuiting the if condition
                 // if first is already at new last, then remove must increment fnr as well
-                if(first.load() == old_last || !is_serial_access(task.accessMode, tasks[old_last - 1].accessMode))
+                if(first.load(std::memory_order_acquire) == old_last
+                   || !is_serial_access(task.accessMode, tasks[old_last - 1].accessMode))
                 {
-                    if(firstNotReady.compare_exchange_strong(old_last, fnr + 1))
+                    if(firstNotReady.compare_exchange_strong(
+                           old_last,
+                           fnr + 1,
+                           std::memory_order_acq_rel,
+                           std::memory_order_relaxed))
                     {
                         task.waitCounter_p->fetch_sub(1, std::memory_order_relaxed);
                     }
@@ -119,19 +124,19 @@ namespace rg
         // doesnt need to be a templated type, type erased handle is enough
         void remove_task(std::coroutine_handle<> handle, ThreadPool* pool_p)
         {
-            auto cur = first.load();
+            auto cur = first.load(std::memory_order_acquire);
             if(tasks[cur].handle == handle)
             {
                 // start to really remove tasks
-                cur = first.fetch_add(1) + 1;
+                cur = first.fetch_add(1, std::memory_order_acq_rel) + 1;
                 // delete the node
 
                 // TODO is this while loop enforcing things correctly? I want the check for the remove state and
                 // termination at fnr before the compare exchange is tried
-                while(tasks[cur].remove_state == 1 && cur != firstNotReady.load())
+                while(tasks[cur].remove_state == 1 && cur != firstNotReady.load(std::memory_order_acquire))
                 {
                     // TODO is it possible to move this into while loop?
-                    if(first.compare_exchange_strong(cur, ++cur))
+                    if(first.compare_exchange_strong(cur, ++cur, std::memory_order_acq_rel, std::memory_order_relaxed))
                     {
                         // delete the node
                         continue;
@@ -149,7 +154,7 @@ namespace rg
                 ++cur;
                 // safe to load current state, as if someone adds a task and changes FNR after this, it is not the task
                 // which was removed.
-                auto fnr = firstNotReady.load();
+                auto fnr = firstNotReady.load(std::memory_order_acquire);
                 // post condition of while: cur != fnr since remove will definitely find the task before fnr
                 //                          cur == fnr only possible if we took charge of updating
                 // TODO remove while loop by also storing position in resource node in the task promise
@@ -162,15 +167,23 @@ namespace rg
                         // initially move and publish first and then check state)
                         tasks[cur].remove_state = 1;
 
-                        if(first.compare_exchange_strong(cur, ++cur))
+                        if(first.compare_exchange_strong(
+                               cur,
+                               ++cur,
+                               std::memory_order_acq_rel,
+                               std::memory_order_relaxed))
                         {
                             // we have taken over upadting
                             // cant use loaded fnr as we more ready tasks might be added and finished as we are
                             // removing stuff
-                            while(tasks[cur].remove_state == 1 && cur != firstNotReady.load())
+                            while(tasks[cur].remove_state == 1 && cur != firstNotReady.load(std::memory_order_acquire))
                             {
                                 // TODO is it possible to move this into while loop?
-                                if(first.compare_exchange_strong(cur, ++cur))
+                                if(first.compare_exchange_strong(
+                                       cur,
+                                       ++cur,
+                                       std::memory_order_acq_rel,
+                                       std::memory_order_relaxed))
                                 {
                                     // delete the node
                                     continue;
@@ -199,14 +212,15 @@ namespace rg
             // THINK ABOUT THIS PROPERTY. It holds for read write resources
 
             // start updating tasks
-            auto fnr = firstNotReady.load();
-            auto temp_last = last.load();
+            auto fnr = firstNotReady.load(std::memory_order_acquire);
+            auto temp_last = last.load(std::memory_order_acquire);
             AccessMode firstNewReadyMode;
             // no more running tasks and there is atleast one not ready task
             // this task is next in line to run. Nothing is blocking it
             if(fnr == cur && temp_last != cur)
             {
-                if(firstNotReady.compare_exchange_strong(fnr, fnr + 1))
+                if(firstNotReady
+                       .compare_exchange_strong(fnr, fnr + 1, std::memory_order_acq_rel, std::memory_order_relaxed))
                 {
                     firstNewReadyMode = tasks[fnr].accessMode;
                     if(tasks[fnr].waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
@@ -223,10 +237,14 @@ namespace rg
             }
             do
             {
-                temp_last = last.load();
+                temp_last = last.load(std::memory_order_acquire);
                 while(fnr != temp_last && !is_serial_access(firstNewReadyMode, tasks[fnr].accessMode))
                 {
-                    if(firstNotReady.compare_exchange_strong(fnr, fnr + 1))
+                    if(firstNotReady.compare_exchange_strong(
+                           fnr,
+                           fnr + 1,
+                           std::memory_order_acq_rel,
+                           std::memory_order_relaxed))
                     {
                         if(tasks[fnr].waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
                         {
@@ -241,7 +259,7 @@ namespace rg
                     }
                 }
                 // TODO return early if exit was via a serial access
-            } while(temp_last != last.load());
+            } while(temp_last != last.load(std::memory_order_acquire));
 
 
             return;
