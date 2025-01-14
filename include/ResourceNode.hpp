@@ -3,20 +3,15 @@
 
 #include "ThreadPool.hpp"
 #include "resources.hpp"
+#include "waitCounter.hpp"
 
+#include <array>
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
-#include <forward_list>
-#include <iterator>
-#include <mutex>
-#include <variant>
 
 namespace rg
 {
-    // Forward declaration of ResourceNode
-    struct ResourceNode;
-
     struct task_access
     {
         // TODO deal with type erasure, need to call promise
@@ -24,6 +19,9 @@ namespace rg
         // std::reference_wrapper<std::type_info const> access_mode; // Type information
         std::atomic<uint32_t>* waitCounter_p{};
         AccessMode accessMode;
+        // remove state 0 - default
+        // remove state 1 - removed
+        bool remove_state = 0;
 
         // TODO try passing T as parameter and then constructing
         template<typename TAccess>
@@ -41,33 +39,34 @@ namespace rg
         // }
 
         // TODO think about default access mode and waitPtr
-        // task_access() : handle(nullptr)
-        // {
-        // }
+        task_access() : handle(nullptr), waitCounter_p{nullptr}
+        {
+        }
 
         // task_access() : handle(nullptr), access_mode(typeid(void))
         // {
         // }
+        task_access(task_access const&) = delete;
+        task_access(task_access&&) = default;
+        task_access& operator=(task_access const&) = delete;
+        task_access& operator=(task_access&&) = default;
     };
 
     // ResourceNode struct with firstNotReady and notify function
     struct ResourceNode
     {
     private:
+        alignas(hardware_destructive_interference_size) std::atomic<uint32_t> first = 0; // Iterator to the first task
+        alignas(hardware_destructive_interference_size) std::atomic<uint32_t> firstNotReady
+            = 0; // Iterator to the first not-ready task
+        alignas(hardware_destructive_interference_size) std::atomic<uint32_t> last
+            = 0; // Iterator to one past the last task
         uint32_t resource_uid; // Unique identifier for the resource
-        std::forward_list<task_access> tasks; // List of task_access instances
-        std::forward_list<task_access>::iterator firstNotReady; // Iterator to the first not-ready task
-        std::forward_list<task_access>::iterator lastTask; // Iterator to the last task before end
-
-        std::mutex mtx;
+        std::array<task_access, 64> tasks;
 
     public:
         // Constructor
-        ResourceNode(uint32_t uid)
-            : resource_uid(uid)
-            , tasks{}
-            , firstNotReady(tasks.end())
-            , lastTask(tasks.before_begin())
+        ResourceNode(uint32_t uid) : resource_uid(uid), tasks{}
         {
             // std::cout << "node id : " << resource_uid << " created" << std::endl;
         }
@@ -80,150 +79,171 @@ namespace rg
         // Add a task to the list, incremenets wait counter of task if task is not immidiately ready to run
         // TODO think about rvalue reference
         // TODO think about returning somethin useful. Maybe bool telling if it is ready
+        // Constraints: Assumes that add_task can only be called by one thread at a time
+        // Usage note: the wait counter of the handle add task is called on must be incremented before calling this
+        //             function
         void add_task(task_access&& task)
         {
-            // std::cout << "add task on node id : " << resource_uid << std::endl;
+            // simply add the task to the end
+            auto old_last = last.load();
+            tasks[old_last] = std::move(task);
+            // Not updating wait counter here as it is an optimizaiton to do it drectly in dispatch task
+            // Publish updated last to other threads
+            last.fetch_add(1);
 
-            // add task to resrource queue
-            // TODO think about empalce
-            // TODO think about locking and when to insert (maybe insert after checking for blocking).
-            // 2 threads cant add together in this design
-            // lastTask = tasks.insert_after(lastTask, task);
-            // check ready
-            std::lock_guard lock(mtx);
-
-            if(firstNotReady == tasks.end())
+            // add only needs to set tasks to ready if FNR is last, i.e. no not ready tasks
+            // if FNR is not old_last here then
+            // either fnr is at an older task than old_last, and we cant be ready
+            // or fnr is at new last, and we dont need to do anything (other threads can already see the new last here)
+            auto fnr = firstNotReady.load();
+            if(fnr == old_last)
             {
-                // all previous tasks are ready
-                // no tasks in queue
-                // Add as ready
-                if(firstNotReady == tasks.begin())
+                // we take responsibility to update
+                // update if no one blocks
+                // if empty or is parallel with previous task (prev task exists because not empty)
+                // we rely on short circuiting the if condition
+                // if first is already at new last, then remove must increment fnr as well
+                if(first.load() == old_last || !is_serial_access(task.accessMode, tasks[old_last - 1].accessMode))
                 {
-                    // std::cout << "empty queue" << std::endl;
-                    lastTask = tasks.insert_after(lastTask, task);
-                    // set to end all the time since end might change after adding a task
-                    firstNotReady = tasks.end();
-                    return;
+                    if(firstNotReady.compare_exchange_strong(old_last, fnr + 1))
+                    {
+                        task.waitCounter_p->fetch_sub(1, std::memory_order_relaxed);
+                    }
                 }
-                // check if some ready task blocks me
-                if(is_serial_access(task.accessMode, tasks.cbegin()->accessMode))
-                {
-                    // someone is blocking, add and wait
-                    // std::cout << "soemone is blocking" << std::endl;
-                    lastTask = tasks.insert_after(lastTask, task);
-                    firstNotReady = lastTask;
-                    task.waitCounter_p->fetch_add(1, std::memory_order_relaxed);
-                }
-                else
-                {
-                    //  no one is blocking. Add as ready
-                    // std::cout << "no one blocking" << std::endl;
-                    lastTask = tasks.insert_after(lastTask, task);
-                    // set to end all the time since end might change after adding a task
-                    firstNotReady = tasks.end();
-                }
-            }
-            else
-            {
-                // std::cout << "first not ready is not end" << std::endl;
-
-                lastTask = tasks.insert_after(lastTask, task);
-                // firstNotReady stays the same
-                task.waitCounter_p->fetch_add(1, std::memory_order_relaxed);
-                // there is a not ready task before us, so we cannot be ready. Add and wait
             }
         }
 
         // Removes all active tasks from the list which have a handle
         // Task is not guaranteed to be present in this ResourceNode, may not be registered here
-        // returns bool : true if there are no more tasks in the list, signal to delete the node
+        // TODO: maybe return some useful info
         // doesnt need to be a templated type, type erased handle is enough
-        bool remove_task(std::coroutine_handle<> handle, ThreadPool* pool_p)
+        void remove_task(std::coroutine_handle<> handle, ThreadPool* pool_p)
         {
-            // TODO use erase if or find if?
-            // Since task was run, is done, and is being removed, it must have been in the running tasks
-            // Assuming only one of a handle is added
-            std::lock_guard lock(mtx);
-            auto first = tasks.before_begin();
-            auto next = std::next(first);
-
-            // This should always find and remove a task
-            while(next != firstNotReady)
+            auto cur = first.load();
+            if(tasks[cur].handle == handle)
             {
-                // found handle here
-                if(next->handle == handle)
+                // start to really remove tasks
+                cur = first.fetch_add(1) + 1;
+                // delete the node
+
+                // TODO is this while loop enforcing things correctly? I want the check for the remove state and
+                // termination at fnr before the compare exchange is tried
+                while(tasks[cur].remove_state == 1 && cur != firstNotReady.load())
                 {
-                    if(next == lastTask)
+                    // TODO is it possible to move this into while loop?
+                    if(first.compare_exchange_strong(cur, ++cur))
                     {
-                        lastTask = first;
+                        // delete the node
+                        continue;
                     }
-                    tasks.erase_after(first);
-                    // erased after first.
-                    // We have a new next. No need to increment first
+                    else
+                    {
+                        return;
+                    }
+                    // TODO return if we found a remove state 0
                 }
-                else
+            }
+            else
+            {
+                // safe to increment cur since first cannot be fnr if remove is called
+                ++cur;
+                // safe to load current state, as if someone adds a task and changes FNR after this, it is not the task
+                // which was removed.
+                auto fnr = firstNotReady.load();
+                // post condition of while: cur != fnr since remove will definitely find the task before fnr
+                //                          cur == fnr only possible if we took charge of updating
+                // TODO remove while loop by also storing position in resource node in the task promise
+                while(cur != fnr)
                 {
-                    ++first;
+                    if(tasks[cur].handle == handle)
+                    {
+                        // delete the node
+                        // publish as removed (Here publish state before checking first. While actually deleting we
+                        // initially move and publish first and then check state)
+                        tasks[cur].remove_state = 1;
+
+                        if(first.compare_exchange_strong(cur, ++cur))
+                        {
+                            // we have taken over upadting
+                            // cant use loaded fnr as we more ready tasks might be added and finished as we are
+                            // removing stuff
+                            while(tasks[cur].remove_state == 1 && cur != firstNotReady.load())
+                            {
+                                // TODO is it possible to move this into while loop?
+                                if(first.compare_exchange_strong(cur, ++cur))
+                                {
+                                    // delete the node
+                                    continue;
+                                }
+                                else
+                                {
+                                    return;
+                                }
+                                // TODO return if we found a remove state 0
+                            }
+                        }
+                        else
+                        {
+                            return;
+                        }
+                        break;
+                    }
+                    ++cur;
                 }
-                next = std::next(first);
-            }
-            if(firstNotReady == tasks.begin())
-            {
-                // only call if ready tasks are finished
-                update_ready(pool_p);
             }
 
-            return tasks.empty();
-        }
+            // task_access has been modified or deleted
+            // starting from the firstNotReady task, check if task can be set to ready
+            // precondition : There are no already running tasks, i.e. firstNotReady is tasks.begin()
+            // Assumes if a task is blocked all future tasks will be blocked. Not true for area resources
+            // THINK ABOUT THIS PROPERTY. It holds for read write resources
 
-        // TODO remove unused func
-        // Check if the ResourceNode is empty
-        bool empty() const
-        {
-            return tasks.empty(); // Returns true if the list is empty
-        }
-
-
-    private:
-        // task_access has been modified or deleted
-        // starting from the firstNotReady task, check if task can be set to ready
-        // precondition : There are no already running tasks, i.e. firstNotReady is tasks.begin()
-        // Assumes if a task is blocked all future tasks will be blocked. Not true for area resources
-        // THINK ABOUT THIS PROPERTY. It holds for read write resources
-        // TODO think of mutexes. Update, add,remove and checkBlocking
-        // returns handle if it can be resumed,
-        void update_ready(ThreadPool* pool_p)
-        {
-            auto last = tasks.end();
-            if(firstNotReady == last)
+            // start updating tasks
+            auto fnr = firstNotReady.load();
+            auto temp_last = last.load();
+            AccessMode firstNewReadyMode;
+            // no more running tasks and there is atleast one not ready task
+            // this task is next in line to run. Nothing is blocking it
+            if(fnr == cur && temp_last != cur)
             {
-                return;
-            }
-            // can only start seting tasks ready if firstNotReady reaches first position
-            if(firstNotReady->waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
-            {
-                // move handle to ready tasks queue
-                pool_p->addTask(firstNotReady->handle);
-            }
-            auto first_accessMode = firstNotReady->accessMode;
-            firstNotReady++;
-            while(firstNotReady != last)
-            {
-                if(is_serial_access(firstNotReady->accessMode, first_accessMode))
+                if(firstNotReady.compare_exchange_strong(fnr, fnr + 1))
                 {
-                    // Stop when a serial access is found
-                    break;
-                }
-                else
-                {
-                    if(firstNotReady->waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
+                    firstNewReadyMode = tasks[fnr].accessMode;
+                    if(tasks[fnr].waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         // move handle to ready tasks queue
-                        pool_p->addTask(firstNotReady->handle);
+                        pool_p->addTask(tasks[fnr].handle);
                     }
-                    firstNotReady++;
+                    ++fnr;
+                }
+                else
+                {
+                    return;
                 }
             }
+            do
+            {
+                temp_last = last.load();
+                while(fnr != temp_last && !is_serial_access(firstNewReadyMode, tasks[fnr].accessMode))
+                {
+                    if(firstNotReady.compare_exchange_strong(fnr, fnr + 1))
+                    {
+                        if(tasks[fnr].waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
+                        {
+                            // move handle to ready tasks queue
+                            pool_p->addTask(tasks[fnr].handle);
+                        }
+                        ++fnr;
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+                // TODO return early if exit was via a serial access
+            } while(temp_last != last.load());
+
+
             return;
         }
     };

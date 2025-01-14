@@ -33,6 +33,8 @@ namespace rg
         {
             auto const& userQueue = resource.getUserQueue();
             resourceNodes.push_back(userQueue);
+            handle.coro.template promise<typename std::decay_t<decltype(handle)>::promise_type>()
+                .waitCounter.fetch_add(1, std::memory_order_relaxed);
             userQueue->add_task({handle.coro.get_coroutine_handle(), AccessMode::Write, &waitCounter});
         }
 

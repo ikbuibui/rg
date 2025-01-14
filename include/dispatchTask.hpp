@@ -188,7 +188,7 @@ namespace rg
         // this reserves too large a space, not all accessHandles are resources
         // resourceNodes.reserve(sizeof...(accessHandles));
         resourceNodes.reserve(resource_counter);
-
+        waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
         // Register task to resources
         // Fold expression only for handles satisfying HasAccessType
         (...,
