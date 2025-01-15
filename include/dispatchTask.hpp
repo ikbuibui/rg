@@ -154,6 +154,20 @@ namespace rg
     // Callable is a Task
     // thread_local static uint counter = 0;
 
+    // Helper lambda to process each accessHandle
+    auto process_handle(auto&& handle, uint16_t& resource_counter) -> decltype(auto)
+    {
+        if constexpr(HasAccessType<std::decay_t<decltype(handle)>>)
+        {
+            resource_counter++;
+            return handle.get(); // Call get() for types with access type
+        }
+        else
+        {
+            return std::forward<decltype(handle)>(handle); // Pass other types directly
+        }
+    };
+
     template<bool Synchronous = false, bool finishedOnReturn = false, typename Callable, typename... ResourceAccess>
     auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles)
     {
@@ -162,24 +176,11 @@ namespace rg
         // std::cout << "Counter for thread " << std::this_thread::get_id() << " is " << counter++ << std::endl;
 
         uint16_t resource_counter = 0;
-        // Helper lambda to process each accessHandle
-        auto process_handle = [&resource_counter](auto&& handle) -> decltype(auto)
-        {
-            if constexpr(HasAccessType<std::decay_t<decltype(handle)>>)
-            {
-                resource_counter++;
-                return handle.get(); // Call get() for types with access type
-            }
-            else
-            {
-                return std::forward<decltype(handle)>(handle); // Pass other types directly
-            }
-        };
 
         // create the awaitabletask coroutine.
         auto handle = std::invoke(
             std::forward<Callable>(callable),
-            process_handle(std::forward<ResourceAccess>(accessHandles))...);
+            process_handle(std::forward<ResourceAccess>(accessHandles), resource_counter)...);
 
         // can access coro because it this function is a friend
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
