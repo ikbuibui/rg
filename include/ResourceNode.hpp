@@ -62,7 +62,7 @@ namespace rg
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> last
             = 0; // Iterator to one past the last task
         uint32_t resource_uid; // Unique identifier for the resource
-        std::array<task_access, 64> tasks;
+        std::array<task_access, 1024> tasks;
 
     public:
         // Constructor
