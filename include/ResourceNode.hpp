@@ -241,6 +241,10 @@ namespace rg
                     return;
                 }
             }
+            else
+            {
+                return;
+            }
             bool parallel_exit = false;
             do
             {
