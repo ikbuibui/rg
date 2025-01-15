@@ -66,7 +66,7 @@ auto nqueens(int xMax, std::array<char, N> buf) -> rg::Task<int>
     co_return ret;
 };
 
-auto main_wrapper(rg::ThreadPool* ptr) -> rg::InitTask<int>
+auto main_wrapper([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
     {
         std::array<char, nqueens_work> buf{};
@@ -94,7 +94,7 @@ auto main_wrapper(rg::ThreadPool* ptr) -> rg::InitTask<int>
     co_return 0;
 }
 
-int main(int argc, char* argv[])
+int main()
 {
     std::printf("threads: %" PRIu64 "\n", thread_count);
 

@@ -19,7 +19,7 @@ inline auto fib(size_t n) -> rg::Task<size_t>
     co_return co_await a.get() + b;
 };
 
-auto main_wrapper(rg::ThreadPool* ptr, size_t n) -> rg::InitTask<int>
+auto main_wrapper([[maybe_unused]] rg::ThreadPool* ptr, size_t n) -> rg::InitTask<int>
 {
     co_await rg::dispatch_task(fib, 30);
     co_await rg::BarrierAwaiter{};

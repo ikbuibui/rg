@@ -95,7 +95,7 @@ void print(Container c)
     std::cout << "}";
 }
 
-auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
+auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
     std::vector<rg::Resource<std::shared_ptr<std::array<uint64_t, 8>>>> resources(n_resources);
 

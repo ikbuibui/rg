@@ -67,7 +67,7 @@ rg::Task<void> loop_skynet()
     std::printf("    duration: %" PRIu64 " us\n", totalTimeUs.count());
 }
 
-auto main_wrapper(rg::ThreadPool* ptr) -> rg::InitTask<int>
+auto main_wrapper([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
     co_await rg::dispatch_task(skynet<8>); // warmup
     co_await rg::BarrierAwaiter{};
