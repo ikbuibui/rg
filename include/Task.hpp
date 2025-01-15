@@ -86,7 +86,7 @@ namespace rg
             // not incremented in constructor of shared handle
             alignas(hardware_destructive_interference_size)
                 std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
-            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState = 1;
+            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState{1};
 
             // TODO think should I hold this in task
             // initialized in await_transform of parent coroutine
@@ -112,7 +112,7 @@ namespace rg
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
             template<typename... Args>
-            promise_type(Args...)
+            promise_type(Args const&...)
                 : self{SharedCoroutineHandle(
                       std::coroutine_handle<promise_type>::from_promise(*this),
                       sharedOwnerCounter)}
@@ -289,7 +289,7 @@ namespace rg
             // not incremented in constructor of shared handle
             alignas(hardware_destructive_interference_size)
                 std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
-            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState = 1;
+            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState{1};
 
             // TODO think should I hold this in task
             // initialized in await_transform of parent coroutine
@@ -312,7 +312,7 @@ namespace rg
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
             template<typename... Args>
-            promise_type(Args...)
+            promise_type(Args const&...)
                 : self{SharedCoroutineHandle(
                       std::coroutine_handle<promise_type>::from_promise(*this),
                       sharedOwnerCounter)}
