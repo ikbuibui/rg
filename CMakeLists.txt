@@ -38,6 +38,34 @@ target_compile_options(
 
 find_package(Threads REQUIRED)
 
+# Find a faster alloc
+# Since each new coroutine requires an allocation, they are sensitive to
+# allocator performance. Any of tcmalloc, mimalloc, or jemalloc provide superior
+# performance to the default glibc malloc. Try to find any of these 3 before
+# falling back to default.
+find_package(libtcmalloc)
+
+if(LIBTCMALLOC_FOUND)
+  set(MALLOC_LIB "${LIBTCMALLOC_LIBRARY}")
+  message(STATUS "Using malloc: ${MALLOC_LIB}")
+else()
+  find_package(libmimalloc)
+
+  if(LIBMIMALLOC_FOUND)
+    set(MALLOC_LIB "${LIBMIMALLOC_LIBRARY}")
+    message(STATUS "Using malloc: ${MALLOC_LIB}")
+  else()
+    find_package(libjemalloc)
+
+    if(LIBJEMALLOC_FOUND)
+      set(MALLOC_LIB "${LIBJEMALLOC_LIBRARY}")
+      message(STATUS "Using malloc: ${MALLOC_LIB}")
+    else()
+      message(STATUS "Using malloc: default")
+    endif()
+  endif()
+endif()
+
 # Find HwLoc
 find_path(
   HWLOC_INCLUDE_DIR
@@ -73,7 +101,7 @@ get_filename_component(HWLOC_LIBRARY_DIR ${HWLOC} DIRECTORY)
 # Add the library directory to the link directories
 target_link_directories(rg INTERFACE ${HWLOC_LIBRARY_DIR})
 
-target_link_libraries(rg INTERFACE Threads::Threads ${HWLOC})
+target_link_libraries(rg INTERFACE Threads::Threads ${HWLOC} ${MALLOC_LIB})
 
 target_include_directories(rg INTERFACE ${HWLOC_INCLUDE_DIR})
 
