@@ -131,9 +131,12 @@ namespace rg
                 cur = first.fetch_add(1, std::memory_order_acq_rel) + 1;
                 // delete the node
 
+                bool found_completed_task_exit = false;
+
                 // TODO is this while loop enforcing things correctly? I want the check for the remove state and
                 // termination at fnr before the compare exchange is tried
-                while(tasks[cur].remove_state == 1 && cur != firstNotReady.load(std::memory_order_acquire))
+                while((found_completed_task_exit = (tasks[cur].remove_state == 1))
+                      && cur != firstNotReady.load(std::memory_order_acquire))
                 {
                     // TODO is it possible to move this into while loop?
                     if(first.compare_exchange_strong(cur, ++cur, std::memory_order_acq_rel, std::memory_order_relaxed))
@@ -145,7 +148,10 @@ namespace rg
                     {
                         return;
                     }
-                    // TODO return if we found a remove state 0
+                    if(!found_completed_task_exit)
+                    {
+                        return;
+                    }
                 }
             }
             else
@@ -174,6 +180,7 @@ namespace rg
                                std::memory_order_relaxed))
                         {
                             // we have taken over upadting
+
                             bool found_completed_task_exit = false;
 
                             // cant use loaded fnr as we more ready tasks might be added and finished as we are
