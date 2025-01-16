@@ -8,6 +8,9 @@ project(
 
 include(GNUInstallDirs)
 
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake
+                      ${CMAKE_MODULE_PATH})
+
 # Set build type
 set(CMAKE_BUILD_TYPE Release)
 
