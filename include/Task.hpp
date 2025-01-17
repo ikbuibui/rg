@@ -82,7 +82,7 @@ namespace rg
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
+            alignas(hardware_destructive_interference_size) std::atomic<TWaitCount> waitCounter{INVALID_WAIT_STATE};
             // not incremented in constructor of shared handle
             alignas(hardware_destructive_interference_size)
                 std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
@@ -285,7 +285,7 @@ namespace rg
             // start from a large offset, add to it when registering
             // decrement the offset when registration is done to avoid races which start exec while registering
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            alignas(hardware_destructive_interference_size) std::atomic<uint32_t> waitCounter{INVALID_WAIT_STATE};
+            alignas(hardware_destructive_interference_size) std::atomic<TWaitCount> waitCounter{INVALID_WAIT_STATE};
             // not incremented in constructor of shared handle
             alignas(hardware_destructive_interference_size)
                 std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};

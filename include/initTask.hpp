@@ -56,7 +56,7 @@ namespace rg
             // does this need to be optional?
             std::optional<T> result = std::nullopt;
             // needs to be atomic. multiple threads will change this if deregistering from resources together
-            // std::atomic<uint32_t> waitCounter = 0;
+            // std::atomic<TWaitCount> waitCounter = 0;
             // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
             // someone else waits for the completion of this task.
             std::coroutine_handle<> continuationHandle = nullptr;

@@ -17,7 +17,7 @@ namespace rg
         // TODO deal with type erasure, need to call promise
         std::coroutine_handle<> handle; // Coroutine handle
         // std::reference_wrapper<std::type_info const> access_mode; // Type information
-        std::atomic<uint32_t>* waitCounter_p{};
+        std::atomic<TWaitCount>* waitCounter_p{};
         AccessMode accessMode;
         // remove state 0 - default
         // remove state 1 - removed
