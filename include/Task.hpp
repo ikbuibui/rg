@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <coroutine>
+#include <utility>
 
 namespace rg
 {
@@ -175,7 +176,7 @@ namespace rg
             // Called by children of this task
             // TODO think abour using a concept
             template<typename U, bool Synchronous, bool finishedOnReturn>
-            auto await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn> awaiter)
+            auto& await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn>& awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -207,11 +208,10 @@ namespace rg
                 return awaiter;
             }
 
-            // TODO PASS BY REF? also in init
             template<typename NonDispatchAwaiter>
-            auto await_transform(NonDispatchAwaiter aw)
+            auto await_transform(NonDispatchAwaiter&& aw)
             {
-                return aw;
+                return std::forward<NonDispatchAwaiter>(aw);
             }
 
             static void* operator new(std::size_t n) noexcept
@@ -392,7 +392,7 @@ namespace rg
             // Called by children of this task
             // TODO think abour using a concept
             template<typename U, bool finishedOnReturn>
-            auto await_transform(DispatchAwaiter<U, finishedOnReturn> awaiter)
+            auto& await_transform(DispatchAwaiter<U, finishedOnReturn>& awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -424,11 +424,10 @@ namespace rg
                 return awaiter;
             }
 
-            // TODO PASS BY REF? also in init
             template<typename NonDispatchAwaiter>
-            auto await_transform(NonDispatchAwaiter aw)
+            auto await_transform(NonDispatchAwaiter&& aw)
             {
-                return aw;
+                return std::forward<NonDispatchAwaiter>(aw);
             }
 
             static void* operator new(std::size_t n) noexcept

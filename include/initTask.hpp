@@ -10,6 +10,7 @@
 #include <coroutine>
 #include <mutex>
 #include <optional>
+#include <utility>
 
 namespace rg
 {
@@ -132,7 +133,7 @@ namespace rg
 
             // TODO contrain args to resource concept
             template<typename U, bool Synchronous, bool finishedOnReturn>
-            auto await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn> awaiter)
+            auto& await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn>& awaiter)
             {
                 // Init
                 auto& awaiter_promise
@@ -159,9 +160,9 @@ namespace rg
             }
 
             template<typename NonDispatchAwaiter>
-            auto await_transform(NonDispatchAwaiter aw)
+            auto await_transform(NonDispatchAwaiter&& aw)
             {
-                return aw;
+                return std::forward<NonDispatchAwaiter>(aw);
             }
         };
 
