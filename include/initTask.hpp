@@ -79,6 +79,11 @@ namespace rg
                 // rootSpace->pool_p = pool_p;
             }
 
+            promise_type(promise_type const&) = delete;
+            promise_type(promise_type&&) = delete;
+            promise_type& operator=(promise_type const&) = delete;
+            promise_type& operator=(promise_type&&) = delete;
+
             ~promise_type()
             {
                 // std::cout << "all done" << std::endl;

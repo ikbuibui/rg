@@ -16,7 +16,6 @@ namespace rg
     {
         // TODO deal with type erasure, need to call promise
         std::coroutine_handle<> handle; // Coroutine handle
-        // std::reference_wrapper<std::type_info const> access_mode; // Type information
         std::atomic<TWaitCount>* waitCounter_p{};
         AccessMode accessMode;
         // remove state 0 - default
@@ -32,24 +31,16 @@ namespace rg
         {
         }
 
-        // task_access(std::coroutine_handle<> coro_handle, std::type_info const& mode)
-        //     : handle(coro_handle)
-        //     , access_mode(mode)
-        // {
-        // }
-
         // TODO think about default access mode and waitPtr
-        task_access() : handle(nullptr), waitCounter_p{nullptr}
+        task_access() : handle(nullptr)
         {
         }
 
-        // task_access() : handle(nullptr), access_mode(typeid(void))
-        // {
-        // }
         task_access(task_access const&) = delete;
         task_access(task_access&&) = default;
         task_access& operator=(task_access const&) = delete;
         task_access& operator=(task_access&&) = default;
+        ~task_access() = default;
     };
 
     // ResourceNode struct with firstNotReady and notify function

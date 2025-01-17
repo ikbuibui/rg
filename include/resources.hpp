@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -93,15 +92,15 @@ namespace rg
     //     T::obj;
     // };
 
-    template<typename... Ts>
-    struct TypeList
-    {
-        template<typename Func>
-        static constexpr void for_each(Func&& func)
-        {
-            (func.template operator()<Ts>(), ...); // Fold expression
-        }
-    };
+    // template<typename... Ts>
+    // struct TypeList
+    // {
+    //     template<typename Func>
+    //     static constexpr void for_each(Func&& func)
+    //     {
+    //         (func.template operator()<Ts>(), ...); // Fold expression
+    //     }
+    // };
 
     // template<typename T>
     // struct ExtractResourceID;

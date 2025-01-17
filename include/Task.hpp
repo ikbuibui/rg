@@ -119,6 +119,11 @@ namespace rg
             {
             }
 
+            promise_type(promise_type const&) = delete;
+            promise_type(promise_type&&) = delete;
+            promise_type& operator=(promise_type const&) = delete;
+            promise_type& operator=(promise_type&&) = delete;
+
             ~promise_type()
             { // deregister from resources
                 std::ranges::for_each(
@@ -318,6 +323,11 @@ namespace rg
                       sharedOwnerCounter)}
             {
             }
+
+            promise_type(promise_type const&) = delete;
+            promise_type(promise_type&&) = delete;
+            promise_type& operator=(promise_type const&) = delete;
+            promise_type& operator=(promise_type&&) = delete;
 
             ~promise_type()
             { // deregister from resources

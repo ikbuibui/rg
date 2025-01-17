@@ -45,8 +45,6 @@ namespace rg
         BarrierQueue barrier_queue{};
         // stack_type stack{threadPoolStackSize};
         // stack_type readyQueue{threadPoolStackSize};
-        // std::condition_variable cv;
-        // std::mutex mtx;
         std::stop_source stop_source;
         std::vector<std::jthread> threads;
         hwloc_topology_t const& topology;
