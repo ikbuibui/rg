@@ -214,15 +214,23 @@ namespace rg
                 return aw;
             }
 
-            static void* operator new(std::size_t size)
+            static void* operator new(std::size_t n) noexcept
             {
-                size = (size + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
-                return mtmalloc::malloc(size);
+                // noexceot implies termination on throw
+                n = (n + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
+                return ::operator new(n);
             }
 
-            static void operator delete(void* ptr)
+            static void* operator new(std::size_t n, std::align_val_t al) noexcept
             {
-                mtmalloc::free(ptr);
+                // Don't try to round up the allocation size if there is also a required
+                // alignment. If we end up with size > alignment, that could cause issues.
+                return ::operator new(n, al);
+            }
+
+            static Task get_return_object_on_allocation_failure()
+            {
+                return {};
             }
         };
 
@@ -427,15 +435,23 @@ namespace rg
                 return aw;
             }
 
-            static void* operator new(std::size_t size)
+            static void* operator new(std::size_t n) noexcept
             {
-                size = (size + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
-                return mtmalloc::malloc(size);
+                // noexceot implies termination on throw
+                n = (n + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
+                return ::operator new(n);
             }
 
-            static void operator delete(void* ptr)
+            static void* operator new(std::size_t n, std::align_val_t al) noexcept
             {
-                mtmalloc::free(ptr);
+                // Don't try to round up the allocation size if there is also a required
+                // alignment. If we end up with size > alignment, that could cause issues.
+                return ::operator new(n, al);
+            }
+
+            static Task get_return_object_on_allocation_failure()
+            {
+                return {};
             }
         };
 
