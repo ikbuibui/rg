@@ -46,28 +46,28 @@ find_package(Threads REQUIRED)
 # allocator performance. Any of tcmalloc, mimalloc, or jemalloc provide superior
 # performance to the default glibc malloc. Try to find any of these 3 before
 # falling back to default.
-find_package(libtcmalloc)
+# find_package(libtcmalloc)
 
-if(LIBTCMALLOC_FOUND)
-  set(MALLOC_LIB "${LIBTCMALLOC_LIBRARY}")
-  message(STATUS "Using malloc: ${MALLOC_LIB}")
-else()
-  find_package(libmimalloc)
+# if(LIBTCMALLOC_FOUND)
+#   set(MALLOC_LIB "${LIBTCMALLOC_LIBRARY}")
+#   message(STATUS "Using malloc: ${MALLOC_LIB}")
+# else()
+#   find_package(libmimalloc)
 
-  if(LIBMIMALLOC_FOUND)
-    set(MALLOC_LIB "${LIBMIMALLOC_LIBRARY}")
-    message(STATUS "Using malloc: ${MALLOC_LIB}")
-  else()
-    find_package(libjemalloc)
+#   if(LIBMIMALLOC_FOUND)
+#     set(MALLOC_LIB "${LIBMIMALLOC_LIBRARY}")
+#     message(STATUS "Using malloc: ${MALLOC_LIB}")
+#   else()
+#     find_package(libjemalloc)
 
-    if(LIBJEMALLOC_FOUND)
-      set(MALLOC_LIB "${LIBJEMALLOC_LIBRARY}")
-      message(STATUS "Using malloc: ${MALLOC_LIB}")
-    else()
-      message(STATUS "Using malloc: default")
-    endif()
-  endif()
-endif()
+#     if(LIBJEMALLOC_FOUND)
+#       set(MALLOC_LIB "${LIBJEMALLOC_LIBRARY}")
+#       message(STATUS "Using malloc: ${MALLOC_LIB}")
+#     else()
+#       message(STATUS "Using malloc: default")
+#     endif()
+#   endif()
+# endif()
 
 # Find HwLoc
 find_path(
