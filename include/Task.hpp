@@ -227,6 +227,10 @@ namespace rg
                 return ::operator new(n, al);
             }
 
+            static void operator delete(void*) noexcept
+            {
+            }
+
             static Task get_return_object_on_allocation_failure()
             {
                 return {};
@@ -446,6 +450,10 @@ namespace rg
                 // Don't try to round up the allocation size if there is also a required
                 // alignment. If we end up with size > alignment, that could cause issues.
                 return ::operator new(n, al);
+            }
+
+            static void operator delete(void*) noexcept
+            {
             }
 
             static Task get_return_object_on_allocation_failure()
