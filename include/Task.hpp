@@ -214,17 +214,19 @@ namespace rg
                 return aw;
             }
 
-            void* operator new(std::size_t size)
+            static void* operator new(std::size_t size) noexcept
             {
-                void* ptr = mtmalloc::malloc(size);
-                if(!ptr)
-                    throw std::bad_alloc{};
-                return ptr;
+                return mtmalloc::malloc(size);
             }
 
-            void operator delete(void* ptr)
+            static void operator delete(void* ptr) noexcept
             {
                 mtmalloc::free(ptr);
+            }
+
+            static Task get_return_object_on_allocation_failure()
+            {
+                return {};
             }
         };
 
@@ -427,6 +429,26 @@ namespace rg
             auto await_transform(NonDispatchAwaiter aw)
             {
                 return aw;
+            }
+
+            static void* operator new(std::size_t n) noexcept
+            {
+                std::printf("task_promise new %zu -> %zu\n", n, (n + 63) & -64);
+                // noexcept implies std::terminate on exception.
+                n = (n + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
+                return ::operator new(n);
+            }
+
+            static void* operator new(std::size_t n, std::align_val_t al) noexcept
+            {
+                // Don't try to round up the allocation size if there is also a required
+                // alignment. If we end up with size > alignment, that could cause issues.
+                return ::operator new(n, al);
+            }
+
+            static Task get_return_object_on_allocation_failure()
+            {
+                return {};
             }
         };
 
