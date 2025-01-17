@@ -224,11 +224,6 @@ namespace rg
             {
                 mtmalloc::free(ptr);
             }
-
-            static Task get_return_object_on_allocation_failure()
-            {
-                return {};
-            }
         };
 
         explicit Task(SharedCoroutineHandle const& h) noexcept : coro(h)
@@ -441,11 +436,6 @@ namespace rg
             static void operator delete(void* ptr)
             {
                 mtmalloc::free(ptr);
-            }
-
-            static Task get_return_object_on_allocation_failure()
-            {
-                return {};
             }
         };
 
