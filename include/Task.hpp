@@ -214,12 +214,13 @@ namespace rg
                 return aw;
             }
 
-            static void* operator new(std::size_t size) noexcept
+            static void* operator new(std::size_t size)
             {
+                size = (size + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
                 return mtmalloc::malloc(size);
             }
 
-            static void operator delete(void* ptr) noexcept
+            static void operator delete(void* ptr)
             {
                 mtmalloc::free(ptr);
             }
@@ -431,12 +432,13 @@ namespace rg
                 return aw;
             }
 
-            static void* operator new(std::size_t size) noexcept
+            static void* operator new(std::size_t size)
             {
+                size = (size + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
                 return mtmalloc::malloc(size);
             }
 
-            static void operator delete(void* ptr) noexcept
+            static void operator delete(void* ptr)
             {
                 mtmalloc::free(ptr);
             }
