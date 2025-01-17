@@ -5,7 +5,6 @@
 #include "SharedCoroutineHandle.hpp"
 #include "ThreadPool.hpp"
 #include "dispatchTask.hpp"
-#include "mtmalloc.hpp"
 
 #include <atomic>
 #include <coroutine>
@@ -212,19 +211,6 @@ namespace rg
             auto await_transform(NonDispatchAwaiter aw)
             {
                 return aw;
-            }
-
-            void* operator new(std::size_t size)
-            {
-                void* ptr = mtmalloc::malloc(size);
-                if(!ptr)
-                    throw std::bad_alloc{};
-                return ptr;
-            }
-
-            void operator delete(void* ptr)
-            {
-                mtmalloc::free(ptr);
             }
         };
 
