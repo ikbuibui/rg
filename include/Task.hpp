@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CoroAllocator.hpp"
 #include "FinalDelete.hpp"
 #include "ResourceNode.hpp"
 #include "SharedCoroutineHandle.hpp"
@@ -215,20 +216,12 @@ namespace rg
 
             static void* operator new(std::size_t n) noexcept
             {
-                // noexceot implies termination on throw
-                n = (n + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
-                return ::operator new(n);
+                return AlignedAllocator<OpNewAllocator>::allocate(n).ptr;
             }
 
-            static void* operator new(std::size_t n, std::align_val_t al) noexcept
+            static void operator delete(void* ptr, std::size_t n) noexcept
             {
-                // Don't try to round up the allocation size if there is also a required
-                // alignment. If we end up with size > alignment, that could cause issues.
-                return ::operator new(n, al);
-            }
-
-            static void operator delete(void*) noexcept
-            {
+                AlignedAllocator<OpNewAllocator>::deallocate({ptr, n});
             }
 
             static Task get_return_object_on_allocation_failure()
@@ -440,20 +433,12 @@ namespace rg
 
             static void* operator new(std::size_t n) noexcept
             {
-                // noexceot implies termination on throw
-                n = (n + hardware_destructive_interference_size - 1) & -hardware_destructive_interference_size;
-                return ::operator new(n);
+                return AlignedAllocator<OpNewAllocator>::allocate(n).ptr;
             }
 
-            static void* operator new(std::size_t n, std::align_val_t al) noexcept
+            static void operator delete(void* ptr, std::size_t n) noexcept
             {
-                // Don't try to round up the allocation size if there is also a required
-                // alignment. If we end up with size > alignment, that could cause issues.
-                return ::operator new(n, al);
-            }
-
-            static void operator delete(void*) noexcept
-            {
+                AlignedAllocator<OpNewAllocator>::deallocate({ptr, n});
             }
 
             static Task get_return_object_on_allocation_failure()
