@@ -16,9 +16,9 @@ set(CMAKE_BUILD_TYPE Release)
 
 # Find Boost for header only boost.lockfree
 
-# find_package(Boost REQUIRED)
+find_package(Boost REQUIRED)
 
-# include_directories(${Boost_INCLUDE_DIRS})
+include_directories(${Boost_INCLUDE_DIRS})
 
 # Add the library target (header-only)
 add_library(rg INTERFACE)
