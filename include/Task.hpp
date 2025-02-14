@@ -216,12 +216,12 @@ namespace rg
 
             static void* operator new(std::size_t n) noexcept
             {
-                return AlignedAllocator<OpNewAllocator>::allocate(n).ptr;
+                return CoroAllocator::allocate(n).ptr;
             }
 
             static void operator delete(void* ptr, std::size_t n) noexcept
             {
-                AlignedAllocator<OpNewAllocator>::deallocate({ptr, n});
+                CoroAllocator::deallocate({ptr, n});
             }
 
             static Task get_return_object_on_allocation_failure()
@@ -432,12 +432,12 @@ namespace rg
 
             static void* operator new(std::size_t n) noexcept
             {
-                return AlignedAllocator<OpNewAllocator>::allocate(n).ptr;
+                return CoroAllocator::allocate(n).ptr;
             }
 
             static void operator delete(void* ptr, std::size_t n) noexcept
             {
-                AlignedAllocator<OpNewAllocator>::deallocate({ptr, n});
+                CoroAllocator::deallocate({ptr, n});
             }
 
             static Task get_return_object_on_allocation_failure()
