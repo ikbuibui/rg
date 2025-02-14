@@ -32,7 +32,7 @@ target_compile_features(rg INTERFACE cxx_std_20)
 # Add specific compiler options for the library
 target_compile_options(
   rg
-  INTERFACE $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -fcoroutines>
+  INTERFACE $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -fcoroutines -Wno-interference-size>
             $<$<CXX_COMPILER_ID:Clang>:-Weverything
             -Wno-c++98-compat
             -Wno-c++98-compat-pedantic

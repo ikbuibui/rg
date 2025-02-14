@@ -48,6 +48,14 @@ namespace rg
             }
         }
 
+        template<typename TPromise>
+        auto barrierTask(std::coroutine_handle<TPromise> continuation) -> rg::Task<void>
+        {
+            auto& promise = continuation.promise();
+            promise.pool_p->barrier_queue.emplace_back(promise.self, promise.coroOutsideTask);
+            co_return;
+        }
+
         // always suspend
         bool await_ready() const noexcept
         {
@@ -60,12 +68,7 @@ namespace rg
         {
             // std::cout << "in barrier" << std::endl;
 
-            auto handle = [](std::coroutine_handle<TPromise> continuation) -> rg::Task<void>
-            {
-                auto& promise = continuation.promise();
-                promise.pool_p->barrier_queue.emplace_back(promise.self, promise.coroOutsideTask);
-                co_return;
-            }(h);
+            auto handle = barrierTask(h);
 
             // can access coro because it this function is a friend
             auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();

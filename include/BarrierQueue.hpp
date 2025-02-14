@@ -16,7 +16,7 @@ namespace rg
             = std::tuple<std::coroutine_handle<>, std::atomic<SharedCoroutineHandle::TRefCount>*, bool*>;
 
         std::vector<barrier_tuple> queue;
-        mutable std::mutex mtx;
+        mutable std::mutex mtx{};
 
         explicit BarrierQueue(std::size_t reserve_size = 4)
         {
