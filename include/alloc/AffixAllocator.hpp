@@ -2,69 +2,46 @@
 
 #include "alloc/MemBlk.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <iostream>
-#include <new>
 #include <type_traits>
 
 namespace rg
 {
     namespace detail
     {
-
         enum class BlockId
         {
             Inner,
             Outer
         };
 
-        // template<typename Affix, typename Enabled = void>
-        // struct affix_creator;
-
-        // template<typename Affix>
-        // struct affix_creator<Affix, typename std::enable_if<std::is_default_constructible<Affix>::value>::type>
-        // {
-        //     template<typename Allocator>
-        //     static constexpr void create(void* p, Allocator&)
-        //     {
-        //         new(p) Affix{};
-        //     }
-        // };
-
-        // template<typename Affix>
-        // struct affix_creator<Affix, typename std::enable_if<!std::is_default_constructible<Affix>::value>::type>
-        // {
-        //     template<typename Allocator>
-        //     static constexpr void create(void* p, Allocator& a)
-        //     {
-        //         new(p) Affix(a);
-        //     }
-        // };
-
-        // template<typename Affix, typename Allocator>
-        // void create_affix_in_place(void* p, Allocator& a)
-        // {
-        //     affix_creator<Affix>::create(p, a);
-        // }
-
         struct no_affix
         {
             using value_type = int;
             static constexpr int pattern = 0;
         };
+
+        constexpr size_t round_to_alignment(size_t alignment, size_t size)
+        {
+            return (size + alignment - 1) & ~(alignment - 1);
+        }
     } // namespace detail
 
-    // getPrefix and getSuffix do not default initialize the affixes, it is the users responsibilty to do it. This to
-    // not require default constructible affixes
     template<typename BaseAllocator, typename Prefix = detail::no_affix, typename Suffix = detail::no_affix>
     requires std::is_trivially_destructible_v<Prefix> && std::is_trivially_destructible_v<Suffix>
     struct AffixAllocator
     {
         static const constinit bool has_prefix = !std::is_same<Prefix, detail::no_affix>::value;
         static const constinit bool has_suffix = !std::is_same<Suffix, detail::no_affix>::value;
-        static const constinit size_t prefixSize = std::max(sizeof(Prefix), alignof(std::max_align_t));
-        static const constinit size_t suffixSize = std::max(sizeof(Suffix), alignof(std::max_align_t));
+        static const constinit size_t prefixSize
+            = detail::round_to_alignment(alignof(std::max_align_t), sizeof(Prefix));
+        static const constinit size_t suffixSize
+            = detail::round_to_alignment(alignof(std::max_align_t), sizeof(Suffix));
+        static const constinit size_t extraSize = prefixSize + suffixSize;
+        static const constinit size_t maxAlignment
+            = std::max({alignof(Prefix), alignof(Suffix), alignof(std::max_align_t)});
 
         // Get the Prefix object from the full affixed block
         template<detail::BlockId ID>
@@ -128,6 +105,7 @@ namespace rg
                 {
                     n += suffixSize;
                 }
+                n = detail::round_to_alignment(maxAlignment, n);
                 return {ptr, n};
             }
         }
@@ -146,37 +124,14 @@ namespace rg
                 block_size += suffixSize;
             }
 
+            block_size = detail::round_to_alignment(maxAlignment, block_size);
+
             auto outer_memBlk = BaseAllocator::allocate(block_size);
             return getBlock<detail::BlockId::Inner>(outer_memBlk);
-
-            // void* user_ptr = static_cast<std::byte*>(base_mem.ptr);
-
-            // if constexpr(has_prefix)
-            // {
-            //     user_ptr = static_cast<std::byte*>(user_ptr) + prefixSize;
-            //     detail::create_affix_in_place<Prefix>(getPrefix, BaseAllocator{});
-            // }
-            // if constexpr(has_suffix)
-            // {
-            //     void* suffix_ptr = static_cast<std::byte*>(user_ptr) + n;
-            //     detail::create_affix_in_place<Suffix>(suffix_ptr, BaseAllocator{});
-            // }
-
-            // return {user_ptr, n};
         }
 
         static void deallocate(MemBlk blk)
         {
-            // if constexpr(has_prefix)
-            // {
-            //     getPrefix<detail::BlockId::Inner>(blk)->~Prefix();
-            // }
-
-            // if constexpr(has_suffix)
-            // {
-            //     getSuffix<detail::BlockId::Inner>(blk)->~Suffix();
-            // }
-
             return BaseAllocator::deallocate(getBlock<detail::BlockId::Outer>(blk));
         }
     };

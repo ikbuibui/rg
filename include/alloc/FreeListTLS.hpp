@@ -3,30 +3,33 @@
 
 #include "alloc/AffixAllocator.hpp"
 #include "alloc/MemBlk.hpp"
-#include "alloc/Singleton.hpp"
-#include "cdrc_stack.hpp"
 
 #include <boost/lockfree/stack.hpp>
 
 #include <cstddef>
-#include <optional>
 
 namespace rg
 {
 
-    template<typename BaseAllocator, size_t Size, unsigned PoolSize = 1024>
-    class FreeListTLS
+    template<typename BaseAllocator, size_t Size, unsigned PoolSize = 16>
+    struct FreeListTLS
     {
         using StackType
             = boost::lockfree::stack<void*, boost::lockfree::fixed_sized<true>, boost::lockfree::capacity<PoolSize>>;
 
-        // using Stack = cdrc::atomic_stack<void*>;
+        // using StackType = cdrc::atomic_stack<void*>;
         // can probably be done without extra memory by storing next ptrs in the memory of the void* using reinterpret
         // ala heap layers
 
         struct Stack
         {
-            static thread_local inline StackType root_{};
+            Stack() = default;
+            Stack(Stack const&) = delete;
+            Stack(Stack&&) = delete;
+            Stack& operator=(Stack const&) = delete;
+            Stack& operator=(Stack&&) = delete;
+
+            StackType root_{};
 
             ~Stack()
             {
@@ -34,22 +37,23 @@ namespace rg
             }
         };
 
-        using SingletonStack = Singleton<Stack>;
+        static thread_local inline Stack stack{};
 
-        using TaggedAlloc = PrefixAllocator<BaseAllocator, SingletonStack*>;
+        using TaggedAlloc = PrefixAllocator<BaseAllocator, Stack*>;
 
-    public:
+        static const constinit size_t extraSize = TaggedAlloc::extraSize;
+
         // pop from thread local free list, if empty, allocate from tagged allocator
-        static MemBlk allocate(size_t) noexcept
+        static MemBlk allocate(size_t n) noexcept
         {
             void* freeBlock = nullptr;
-            if(SingletonStack::getInstance().root_.pop(freeBlock))
+            if(stack.root_.pop(freeBlock))
             {
                 return {freeBlock, Size};
             }
             auto innerBlk = TaggedAlloc::allocate(Size);
-            TaggedAlloc::template getPrefix<detail::BlockId::Inner>(innerBlk) = &SingletonStack::getInstance();
-            return innerBlk;
+            TaggedAlloc::template getPrefix<detail::BlockId::Inner>(innerBlk) = &stack;
+            return {innerBlk.ptr, n};
         }
 
         // push to the free list of allocating thread using the prefix stored
@@ -57,13 +61,13 @@ namespace rg
         {
             auto& prefix = TaggedAlloc::template getPrefix<detail::BlockId::Inner>(blk);
 
-            if(prefix->getInstance().root_.push(blk.ptr))
+            if(prefix->root_.push(blk.ptr))
             {
                 blk.reset();
                 return;
             }
             // maybe try to add to own cache?
-            return TaggedAlloc::deallocate(blk);
+            return TaggedAlloc::deallocate({blk.ptr, Size});
         }
     };
 

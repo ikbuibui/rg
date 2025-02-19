@@ -4,8 +4,8 @@ cmake_minimum_required(VERSION 3.10)
 project(rgTest)
 
 # Add custom flags for different build types
-set(CMAKE_CXX_FLAGS_DEBUG "-g -fcoroutines")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -fcoroutines -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # Find Catch2
 # include(FetchContent)
