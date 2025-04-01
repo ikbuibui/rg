@@ -14,7 +14,7 @@ namespace rg
     template<typename T>
     concept ResourceContainer = requires(T container) {
         typename T::value_type;
-        requires traits::is_specialization_of_v<Resource, typename T::value_type>;
+        requires traits::is_specialization_of_v<typename T::value_type, Resource>;
         { std::begin(container) } -> std::input_iterator;
         { std::end(container) } -> std::input_iterator;
     };
