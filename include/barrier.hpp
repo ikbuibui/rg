@@ -29,10 +29,10 @@ namespace rg
         }
 
         template<typename T>
-        void processResource(Resource<T> const& resource, auto const& handle, auto& resourceNodes, auto& waitCounter)
+        void processResource(Resource<T> const& resource, auto const& handle, auto& resourceQueues, auto& waitCounter)
         {
             auto const& userQueue = resource.getUserQueue();
-            resourceNodes.push_back(userQueue);
+            resourceQueues.push_back(userQueue);
             handle.coro.template promise<typename std::decay_t<decltype(handle)>::promise_type>()
                 .waitCounter.fetch_add(1, std::memory_order_relaxed);
             userQueue->add_task({handle.coro.get_coroutine_handle(), AccessMode::Write, &waitCounter});
@@ -40,11 +40,11 @@ namespace rg
 
         // Process a container of resources
         template<ResourceContainer RC>
-        void processResource(RC const& container, auto const& handle, auto& resourceNodes, auto& waitCounter)
+        void processResource(RC const& container, auto const& handle, auto& resourceQueues, auto& waitCounter)
         {
             for(auto const& resource : container)
             {
-                processResource(resource, handle, resourceNodes, waitCounter);
+                processResource(resource, handle, resourceQueues, waitCounter);
             }
         }
 
@@ -77,13 +77,13 @@ namespace rg
             // handlePromise.continuationHandle = h;
             // handlePromise.workingState = 2;
 
-            auto& resourceNodes = handlePromise.resourceNodes;
+            auto& resourceQueues = handlePromise.resourceQueues;
             auto& waitCounter = handlePromise.waitCounter;
-            resourceNodes.reserve(sizeof...(ResArgs));
+            resourceQueues.reserve(sizeof...(ResArgs));
 
             std::apply(
-                [&resourceNodes, &waitCounter, &handle, this](auto const&... resources)
-                { (processResource(resources.get(), handle, resourceNodes, waitCounter), ...); },
+                [&resourceQueues, &waitCounter, &handle, this](auto const&... resources)
+                { (processResource(resources.get(), handle, resourceQueues, waitCounter), ...); },
                 resources);
 
             // task is ready to be eaten after fetch sub.

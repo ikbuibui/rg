@@ -65,3 +65,10 @@ out
 
 # zed configuration file
 /.zed
+
+# cdrc
+include/cdrc
+include/cdrc_stack.hpp
+
+# explore
+explore

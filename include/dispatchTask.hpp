@@ -12,9 +12,20 @@
 
 namespace rg
 {
+    /**
+     * @brief DispatchAwaiter is a struct template that manages the suspension and resumption of coroutines.
+     *
+     * @tparam T The type of the coroutine handle.
+     * @tparam Synchronous A boolean indicating if the continuation should striclty happen after the passed in handle
+     * @tparam finishedOnReturn A boolean indicating if the task guarantees that it, including its subtasks is finished
+     * when it returns.
+     */
     template<typename T, bool Synchronous = false, bool finishedOnReturn = false>
     struct DispatchAwaiter;
 
+    /**
+     * @brief Specialization of DispatchAwaiter for synchronous executions.
+     */
     template<typename T, bool finishedOnReturn>
     struct DispatchAwaiter<T, true, finishedOnReturn>
     {
@@ -104,8 +115,8 @@ namespace rg
         {
             // save here, as after dispatching self to the threadpool, this awaiter object (holding handle) may be
             // destroyed, then the return statement would be use after free
-            auto resume_ready_handle = handle.coro.get_coroutine_handle();
-            auto pool_p = h.promise().pool_p;
+            auto const resume_ready_handle = handle.coro.get_coroutine_handle();
+            auto const pool_p = h.promise().pool_p;
             // suspend only called when resources are ready
             // assert(resourcesReady);
             // emplace continuation to stack
@@ -184,22 +195,22 @@ namespace rg
 
         // can access coro because it this function is a friend
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
-        auto& resourceNodes = handlePromise.resourceNodes;
+        auto& resourceQueues = handlePromise.resourceQueues;
         auto& waitCounter = handlePromise.waitCounter;
         // this reserves too large a space, not all accessHandles are resources
-        // resourceNodes.reserve(sizeof...(accessHandles));
-        resourceNodes.reserve(resource_counter);
+        // resourceQueues.reserve(sizeof...(accessHandles));
+        resourceQueues.reserve(resource_counter);
         waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
         // Register task to resources
         // Fold expression only for handles satisfying HasAccessType
         (...,
          (
-             [&resourceNodes, &handle, &waitCounter](auto const& accessHandle)
+             [&resourceQueues, &handle, &waitCounter](auto const& accessHandle)
              {
                  if constexpr(HasAccessType<std::decay_t<decltype(accessHandle)>>)
                  {
                      auto const& userQueue = accessHandle.getUserQueue();
-                     resourceNodes.push_back(userQueue);
+                     resourceQueues.push_back(userQueue);
 
                      userQueue->add_task(
                          {handle.coro.get_coroutine_handle(), accessHandle.getAccessMode(), &waitCounter});

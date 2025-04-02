@@ -43,8 +43,8 @@ namespace rg
         ~task_access() = default;
     };
 
-    // ResourceNode struct with firstNotReady and notify function
-    struct ResourceNode
+    // ResourceTaskQueue struct with firstNotReady and notify function
+    struct ResourceTaskQueue
     {
     private:
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> first = 0; // Iterator to the first task
@@ -57,7 +57,7 @@ namespace rg
 
     public:
         // Constructor
-        ResourceNode(uint32_t uid) : resource_uid(uid), tasks{}
+        ResourceTaskQueue(uint32_t uid) : resource_uid(uid), tasks{}
         {
             // std::cout << "node id : " << resource_uid << " created" << std::endl;
         }
@@ -110,7 +110,7 @@ namespace rg
         }
 
         // Removes all active tasks from the list which have a handle
-        // Task is not guaranteed to be present in this ResourceNode, may not be registered here
+        // Task is not guaranteed to be present in this ResourceTaskQueue, may not be registered here
         // TODO: maybe return some useful info
         // doesnt need to be a templated type, type erased handle is enough
         void remove_task(std::coroutine_handle<> handle, ThreadPool* pool_p)

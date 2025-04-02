@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -227,7 +228,7 @@ namespace rg
 
 
     // forward declaration to hold shared pointer
-    struct ResourceNode;
+    struct ResourceTaskQueue;
 
     template<typename TRes>
     class ResourceAccess
@@ -266,7 +267,7 @@ namespace rg
             return resource.get().getUserQueue()->getId();
         }
 
-        std::shared_ptr<ResourceNode> const& getUserQueue() const
+        std::shared_ptr<ResourceTaskQueue> const& getUserQueue() const
         {
             return resource.get().getUserQueue();
         }
@@ -281,29 +282,36 @@ namespace rg
     class Resource
     {
     private:
+        // std::optional<T> value; // Stores an object if owning
+        // T* ref = nullptr; // Stores a reference if non-owning
         // Use std::variant to manage storage of value or reference
         std::variant<T, std::reference_wrapper<T>> storage;
-        std::shared_ptr<ResourceNode> userQueue = std::make_shared<ResourceNode>(GlobalIDGenerator::generate_id());
+
+        std::shared_ptr<ResourceTaskQueue> userQueue
+            = std::make_shared<ResourceTaskQueue>(GlobalIDGenerator::generate_id());
 
     public:
-        // Constructor for lvalue (stores a reference)
         Resource(T& ref) : storage(std::forward<std::reference_wrapper<T>>(ref))
+        //       Resource(T const& r)
+        // : ref(&r)
         {
-            // std::cout << "Stored reference to lvalue\n";
         }
 
         // Constructor for rvalue (temporary value)
         Resource(T&& value) : storage(std::move(value))
+        //       Resource(T && val)
+        // : value(std::move(val))
+        // , ref(&*value)
         {
-            // std::cout << "Moved temporary value into Resource" << std::endl;
         }
 
+        // Resource() : value(std::move(T{}))
         Resource() : storage(std::move(T{}))
         {
             // std::cout << "Default construct T" << std::endl;
         }
 
-        std::shared_ptr<ResourceNode> const& getUserQueue() const
+        std::shared_ptr<ResourceTaskQueue> const& getUserQueue() const
         {
             return userQueue;
         }
@@ -318,6 +326,7 @@ namespace rg
             {
                 return std::get<T>(storage);
             }
+            // return *ref;
         }
 
         T const& get() const
@@ -330,6 +339,7 @@ namespace rg
             {
                 return std::get<T>(storage);
             }
+            // return *ref;
         }
 
         // Read accessor

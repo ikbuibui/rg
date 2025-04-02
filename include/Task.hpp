@@ -105,7 +105,7 @@ namespace rg
             SharedCoroutineHandle self;
 
             // hold res in vector to deregister later
-            std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
+            std::vector<std::shared_ptr<ResourceTaskQueue>> resourceQueues;
             // does this need to be optional?
             T result;
             // true as the return object is always created
@@ -129,7 +129,7 @@ namespace rg
             ~promise_type()
             { // deregister from resources
                 std::ranges::for_each(
-                    resourceNodes,
+                    resourceQueues,
                     [this](auto const& resNode)
                     { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
             }
@@ -326,7 +326,7 @@ namespace rg
             SharedCoroutineHandle self;
 
             // hold res in vector to deregister later
-            std::vector<std::shared_ptr<ResourceNode>> resourceNodes;
+            std::vector<std::shared_ptr<ResourceTaskQueue>> resourceQueues;
             // true as the return object is always created
             bool coroOutsideTask = true;
 
@@ -348,7 +348,7 @@ namespace rg
             ~promise_type()
             { // deregister from resources
                 std::ranges::for_each(
-                    resourceNodes,
+                    resourceQueues,
                     [this](auto const& resNode)
                     { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
             }
