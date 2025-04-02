@@ -22,3 +22,6 @@ foreach(EXAMPLE ${EXAMPLES})
     add_executable(${EXAMPLE_NAME} ${EXAMPLE})
     target_link_libraries(${EXAMPLE_NAME} PRIVATE rg)
 endforeach()
+
+# Add the heatEquation2D example
+add_subdirectory(heatEquation2D)
