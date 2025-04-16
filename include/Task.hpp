@@ -2,7 +2,7 @@
 
 #include "CoroAllocator.hpp"
 #include "FinalDelete.hpp"
-#include "ResourceNode.hpp"
+#include "ResourceTaskQueue.hpp"
 #include "SharedCoroutineHandle.hpp"
 #include "ThreadPool.hpp"
 #include "dispatchTask.hpp"
@@ -48,7 +48,7 @@ namespace rg
         // will only be called after the task is done
         auto await_resume() const noexcept
         {
-            auto result = coro.promise<AwaitedPromise>().result;
+            auto result = std::move(coro.promise<AwaitedPromise>().result);
             coro.promise<AwaitedPromise>().coroOutsideTask = false;
             return result;
         }
