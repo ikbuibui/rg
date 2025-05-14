@@ -6,9 +6,11 @@
 #include "SharedCoroutineHandle.hpp"
 #include "ThreadPool.hpp"
 #include "dispatchTask.hpp"
+#include "resources.hpp"
 
 #include <atomic>
 #include <coroutine>
+#include <functional>
 #include <utility>
 
 namespace rg
@@ -18,6 +20,7 @@ namespace rg
     // if coro is not done - suspend (go to caller, if it is main, skip over everything, this will be resumed by the
     // pool when coro is done), add to waiter queue (worker will loop over this queue and check if done) Add promise
     // type for this awaiter
+    // for void tasks this waits for task to complete
     // template on awaited promise to see if it holds a task space
     template<typename T, typename AwaitedPromise>
     struct GetAwaiter
@@ -67,14 +70,11 @@ namespace rg
         template<typename U>
         friend struct InitTask;
 
-        template<typename U, bool Synchronous, bool finishedOnReturn>
+        template<typename U, bool synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<typename... ResArgs>
+        template<IsResource... TArgs>
         friend struct BarrierAwaiter;
-
-        template<bool Synchronous, bool finishedOnReturn, typename Callable, typename... ResourceAccess>
-        friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
         {
@@ -104,8 +104,9 @@ namespace rg
             // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
             SharedCoroutineHandle self;
 
-            // hold res in vector to deregister later
-            std::vector<std::shared_ptr<ResourceTaskQueue>> resourceQueues;
+            // requires stable pointer access to taskData
+            std::vector<std::pair<ResourceTaskQueue*, TaskData*>> resourceUsage;
+
             // does this need to be optional?
             T result;
             // true as the return object is always created
@@ -113,25 +114,42 @@ namespace rg
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
+            // called with the copied in arguments
+            // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly dangle
             template<typename... Args>
-            promise_type(Args const&...)
-                : self{SharedCoroutineHandle(
+            promise_type(ThreadPool* ptr, Args&... args)
+                : pool_p{ptr}
+                , self{SharedCoroutineHandle(
                       std::coroutine_handle<promise_type>::from_promise(*this),
                       sharedOwnerCounter)}
             {
+                constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
+                resourceUsage.reserve(resource_counter);
+                waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
+                // Register task to resources
+                // Fold expression only for handles satisfying HasAccessType
+                (...,
+                 (
+                     [this](auto& arg)
+                     {
+                         if constexpr(IsResourceAccess<decltype(arg)>)
+                         {
+                             resourceUsage.emplace_back(
+                                 &arg.resource.getResNode().userQueue,
+                                 arg.resource.getResNode().userQueue.add_task(
+                                     {std::coroutine_handle<promise_type>::from_promise(*this),
+                                      std::move(arg.moveAccessMode()),
+                                      &waitCounter,
+                                      pool_p}));
+                         }
+                     }(args)));
             }
 
-            promise_type(promise_type const&) = delete;
-            promise_type(promise_type&&) = delete;
-            promise_type& operator=(promise_type const&) = delete;
-            promise_type& operator=(promise_type&&) = delete;
-
-            ~promise_type()
-            { // deregister from resources
-                std::ranges::for_each(
-                    resourceQueues,
-                    [this](auto const& resNode)
-                    { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
+            // workaround for lamdas which pass their implicit this parameter
+            // not needed if we have C++23 static lambdas
+            template<typename... Args>
+            promise_type(auto&, ThreadPool* ptr, Args&... args) : promise_type(ptr, args...)
+            {
             }
 
             Task get_return_object()
@@ -148,6 +166,13 @@ namespace rg
 
             FinalDelete final_suspend() noexcept
             {
+                // let go of parent
+                parent.reset();
+                // Deregister from resource queue
+                for(auto& resUsage : resourceUsage)
+                {
+                    resUsage.first->remove_task(resUsage.second);
+                }
                 uint32_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
                 // contHandle has been pushed already
@@ -175,19 +200,14 @@ namespace rg
             // TODO PASS BY REF? also in init
             // Called by children of this task
             // TODO think abour using a concept
-            template<typename U, bool Synchronous, bool finishedOnReturn>
-            auto& await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn>& awaiter)
+            // TODO think about moving or passing by reference for awaiter
+            template<typename U, bool synchronous, bool finishedOnReturn>
+            auto& await_transform(DispatchAwaiter<U, synchronous, finishedOnReturn>& awaiter)
             {
                 // Init
                 auto& awaiter_promise
                     = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
 
-                // pass in the parent task space
-                // coro.promise().space->parentSpace = space;
-                // pass in the pool ptr
-                awaiter_promise.pool_p = pool_p;
-
-                // coro.promise().space->ownerHandle = coro.getHandle();
                 if constexpr(!finishedOnReturn)
                 {
                     awaiter_promise.parent = self;
@@ -214,19 +234,14 @@ namespace rg
                 return std::forward<NonDispatchAwaiter>(aw);
             }
 
-            static void* operator new(std::size_t n) noexcept
+            static void* operator new(std::size_t n)
             {
                 return CoroAllocator::allocate(n).ptr;
             }
 
-            static void operator delete(void* ptr, std::size_t n) noexcept
+            static void operator delete(void* ptr, std::size_t n)
             {
                 CoroAllocator::deallocate({ptr, n});
-            }
-
-            static Task get_return_object_on_allocation_failure()
-            {
-                return {};
             }
         };
 
@@ -234,7 +249,7 @@ namespace rg
         {
         }
 
-        Task() noexcept : coro()
+        explicit Task() noexcept : coro()
         {
         }
 
@@ -280,6 +295,8 @@ namespace rg
         bool isMoved = false;
     };
 
+    struct TData;
+
     template<>
     struct Task<void>
     {
@@ -289,14 +306,11 @@ namespace rg
         template<typename U>
         friend struct InitTask;
 
-        template<typename U, bool Synchronous, bool finishedOnReturn>
+        template<typename U, bool synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<typename... ResArgs>
+        template<IsResource... TArgs>
         friend struct BarrierAwaiter;
-
-        template<bool Synchronous, bool finishedOnReturn, typename Callable, typename... ResourceAccess>
-        friend auto dispatch_task(Callable&& callable, ResourceAccess&&... accessHandles);
 
         struct promise_type
         {
@@ -325,32 +339,50 @@ namespace rg
             // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
             SharedCoroutineHandle self;
 
-            // hold res in vector to deregister later
-            std::vector<std::shared_ptr<ResourceTaskQueue>> resourceQueues;
+            // requires stable pointer access to taskData
+            std::vector<std::pair<ResourceTaskQueue*, TaskData*>> resourceUsage;
+
             // true as the return object is always created
             bool coroOutsideTask = true;
 
             // using ResourceIDs = typename decltype(callable)::ResourceIDTypeList;
 
+            // called with the copied in arguments
+            // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly dangle
             template<typename... Args>
-            promise_type(Args const&...)
-                : self{SharedCoroutineHandle(
+            promise_type(ThreadPool* ptr, Args&... args)
+                : pool_p{ptr}
+                , self{SharedCoroutineHandle(
                       std::coroutine_handle<promise_type>::from_promise(*this),
                       sharedOwnerCounter)}
             {
+                constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
+
+                waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
+                // Register task to resources
+                // Fold expression only for ResourceHandles
+                (...,
+                 (
+                     [this](auto& arg)
+                     {
+                         if constexpr(IsResourceAccess<decltype(arg)>)
+                         {
+                             resourceUsage.emplace_back(
+                                 &arg.resource.getResNode().userQueue,
+                                 arg.resource.getResNode().userQueue.add_task(
+                                     {std::coroutine_handle<promise_type>::from_promise(*this),
+                                      std::move(arg.moveAccessMode()),
+                                      &waitCounter,
+                                      pool_p}));
+                         }
+                     }(args)));
             }
 
-            promise_type(promise_type const&) = delete;
-            promise_type(promise_type&&) = delete;
-            promise_type& operator=(promise_type const&) = delete;
-            promise_type& operator=(promise_type&&) = delete;
-
-            ~promise_type()
-            { // deregister from resources
-                std::ranges::for_each(
-                    resourceQueues,
-                    [this](auto const& resNode)
-                    { resNode->remove_task(std::coroutine_handle<promise_type>::from_promise(*this), pool_p); });
+            // workaround for lamdas which pass their implicit this parameter
+            // not needed if we have C++23 static lambdas
+            template<typename... Args>
+            promise_type(auto&, ThreadPool* ptr, Args&... args) : promise_type(ptr, args...)
+            {
             }
 
             Task get_return_object()
@@ -367,6 +399,13 @@ namespace rg
 
             FinalDelete final_suspend() noexcept
             {
+                parent.reset();
+                // Deregister from resource queue
+                for(auto& resUsage : resourceUsage)
+                {
+                    resUsage.first->remove_task(resUsage.second);
+                }
+
                 // get is never called, but void tasks may be called synchronously
                 uint32_t expectedState = 1;
                 workingState.compare_exchange_strong(expectedState, 0);
@@ -391,19 +430,14 @@ namespace rg
             // TODO PASS BY REF? also in init
             // Called by children of this task
             // TODO think abour using a concept
-            template<typename U, bool finishedOnReturn>
-            auto& await_transform(DispatchAwaiter<U, finishedOnReturn>& awaiter)
+            // TODO think about moving or passing by reference for awaiter
+            template<typename U, bool synchronous, bool finishedOnReturn>
+            auto await_transform(DispatchAwaiter<U, synchronous, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise
                     = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
 
-                // pass in the parent task space
-                // coro.promise().space->parentSpace = space;
-                // pass in the pool ptr
-                awaiter_promise.pool_p = pool_p;
-
-                // coro.promise().space->ownerHandle = coro.getHandle();
                 if constexpr(!finishedOnReturn)
                 {
                     awaiter_promise.parent = self;
@@ -430,19 +464,14 @@ namespace rg
                 return std::forward<NonDispatchAwaiter>(aw);
             }
 
-            static void* operator new(std::size_t n) noexcept
+            static void* operator new(std::size_t n)
             {
                 return CoroAllocator::allocate(n).ptr;
             }
 
-            static void operator delete(void* ptr, std::size_t n) noexcept
+            static void operator delete(void* ptr, std::size_t n)
             {
                 CoroAllocator::deallocate({ptr, n});
-            }
-
-            static Task get_return_object_on_allocation_failure()
-            {
-                return {};
             }
         };
 
@@ -450,7 +479,7 @@ namespace rg
         {
         }
 
-        Task() noexcept : coro()
+        explicit Task() noexcept : coro()
         {
         }
 
@@ -478,9 +507,27 @@ namespace rg
             }
         }
 
-
     private:
         SharedCoroutineHandle coro;
         bool isMoved = false;
     };
+
+    template<typename T>
+    concept IsTask = traits::is_specialization_of_v<std::remove_cvref_t<T>, Task>;
+
+    template<typename Callable, typename... Args>
+    concept ReturnsTask = requires(Callable&& func, Args&&... args) {
+        // Check that the callable can be invoked with the given arguments
+        // and that its return type (after removing cv-ref qualifiers) is a specialization of rg::Task
+        { std::invoke_result_t<Callable, Args...>() } -> IsTask;
+    };
+
+    template<bool synchronous = false, bool finishedOnReturn = false, typename... Args>
+    auto dispatch_task(auto&& task, Args&&... args) requires ReturnsTask<decltype(task), Args...>
+    {
+        auto handle = std::invoke(std::forward<decltype(task)>(task), std::forward<Args>(args)...);
+
+        return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle)};
+    }
+
 } // namespace rg

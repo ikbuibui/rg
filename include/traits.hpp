@@ -16,8 +16,8 @@ namespace rg::traits
     };
 
     // Variable template for is_specialization_of
+    // TODO reverse this order
     template<typename T, template<typename...> typename Template>
     inline constexpr bool is_specialization_of_v = is_specialization_of<T, Template>::value;
-
 
 } // namespace rg::traits

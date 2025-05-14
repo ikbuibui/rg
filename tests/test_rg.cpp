@@ -1,12 +1,7 @@
 // tests/test_rg2.cpp
 #define CATCH_CONFIG_MAIN
-#include "ThreadPool.hpp"
-#include "dispatchTask.hpp"
-#include "init.hpp"
-#include "initTask.hpp"
-#include "resources.hpp"
-
 #include <catch2/catch_test_macros.hpp>
+#include <rg.hpp>
 
 #include <chrono>
 #include <iostream>

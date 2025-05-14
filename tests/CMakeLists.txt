@@ -3,10 +3,14 @@ cmake_minimum_required(VERSION 3.10)
 
 project(rgTest)
 
+enable_testing()
+include(CTest)
+
 # Add custom flags for different build types
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
+# Catch2 assertions are not thread safe. So do manual tests
 # Find Catch2
 # include(FetchContent)
 # FetchContent_Declare(
@@ -97,20 +101,15 @@ if(UBSAN)
   endif()
 endif()
 
-set(TEST_SOURCES # test_rg.cpp
-    # randomGraph.cpp
-    randGraph.cpp)
+set(TEST_SOURCE_FILES
+    barrierTest.cpp
+    randGraph.cpp
+)
 
-set(TEST_TARGET rg_tests)
+foreach(SOURCE_FILE ${TEST_SOURCE_FILES})
+    string(REPLACE ".cpp" "" EXECUTABLE_NAME ${SOURCE_FILE})
+    add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
+    target_link_libraries(${EXECUTABLE_NAME} PRIVATE rg)
+    add_test(NAME ${EXECUTABLE_NAME} COMMAND ${EXECUTABLE_NAME})
+endforeach()
 
-# Create the test executable
-add_executable(${TEST_TARGET} ${TEST_SOURCES})
-
-# Link the library and Catch2
-
-# target_link_libraries(${TEST_TARGET} PRIVATE rg Catch2::Catch2WithMain)
-target_link_libraries(${TEST_TARGET} PRIVATE rg)
-
-# Enable CTest
-
-# include(CTest) include(Catch) catch_discover_tests(rg_tests)

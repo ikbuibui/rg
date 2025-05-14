@@ -23,7 +23,7 @@ void check_answer(int result)
 }
 
 template<size_t N>
-auto nqueens(int xMax, std::array<char, N> buf) -> rg::Task<int>
+auto nqueens(rg::ThreadPool* ptr, int xMax, std::array<char, N> buf) -> rg::Task<int>
 {
     if(N == xMax)
     {
@@ -53,7 +53,7 @@ auto nqueens(int xMax, std::array<char, N> buf) -> rg::Task<int>
     std::array<rg::Task<int>, N> parts;
     for([[maybe_unused]] auto t : tasks)
     {
-        parts[taskCount] = co_await rg::dispatch_task(nqueens<N>, xMax + 1, buf);
+        parts[taskCount] = co_await rg::dispatch_task(nqueens<N>, ptr, xMax + 1, buf);
         ++taskCount;
     }
 
@@ -66,13 +66,13 @@ auto nqueens(int xMax, std::array<char, N> buf) -> rg::Task<int>
     co_return ret;
 };
 
-auto main_wrapper([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
+auto main_wrapper(rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
     {
         std::array<char, nqueens_work> buf{};
-        auto result = co_await dispatch_task(nqueens<nqueens_work>, 0, buf); // warmup
+        auto result = co_await dispatch_task(nqueens<nqueens_work>, ptr, 0, buf); // warmup
         check_answer(co_await result.get());
-        rg::BarrierAwaiter{};
+        co_await rg::barrier();
     }
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -80,7 +80,7 @@ auto main_wrapper([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
     for(size_t i = 0; i < iter_count; ++i)
     {
         std::array<char, nqueens_work> buf{};
-        auto result = co_await dispatch_task(nqueens<nqueens_work>, 0, buf);
+        auto result = co_await dispatch_task(nqueens<nqueens_work>, ptr, 0, buf);
         auto res = co_await result.get();
         check_answer(res);
         std::printf("  - %d\n", res);

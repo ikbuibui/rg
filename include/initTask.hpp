@@ -69,35 +69,20 @@ namespace rg
             SharedCoroutineHandle self;
 
             bool task_done = false;
-            bool all_done = false;
             // true as the return object is always created
             bool coroOutsideTask = true;
 
             template<typename... Args>
-            promise_type(ThreadPool* ptr, Args...) : pool_p{ptr}
+            promise_type(ThreadPool* ptr, Args&&...)
+                : pool_p{ptr}
+                , self{SharedCoroutineHandle(
+                      std::coroutine_handle<promise_type>::from_promise(*this),
+                      sharedOwnerCounter)}
             {
-                // TODO can i merge this with init
-                // rootSpace->pool_p = pool_p;
-            }
-
-            promise_type(promise_type const&) = delete;
-            promise_type(promise_type&&) = delete;
-            promise_type& operator=(promise_type const&) = delete;
-            promise_type& operator=(promise_type&&) = delete;
-
-            ~promise_type()
-            {
-                // std::cout << "all done" << std::endl;
-                all_done = true;
-                // std::lock_guard lock(mtx);
-                // cv.notify_all();
             }
 
             InitTask get_return_object()
             {
-                self = SharedCoroutineHandle(
-                    std::coroutine_handle<promise_type>::from_promise(*this),
-                    sharedOwnerCounter);
                 return InitTask{self};
             }
 
@@ -113,7 +98,6 @@ namespace rg
                 // rootSpace.reset();
                 // notify thart work is finished here
                 // finalize
-                // std::lock_guard lock(mtx);
                 // cv.notify_all();
                 // self.reset();
                 return {std::move(self)};
@@ -132,18 +116,13 @@ namespace rg
             }
 
             // TODO contrain args to resource concept
+            // TODO think about moving or passing by reference for awaiter
             template<typename U, bool Synchronous, bool finishedOnReturn>
-            auto& await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn>& awaiter)
+            auto await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn> awaiter)
             {
                 // Init
                 auto& awaiter_promise
                     = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
-                // pass in the parent task space
-                // coro.promise().space->parentSpace = rootSpace;
-                // pass in the pool ptr
-                awaiter_promise.pool_p = pool_p;
-
-                // coro.promise().space->ownerHandle = coro.getHandle();
                 if constexpr(!finishedOnReturn)
                 {
                     awaiter_promise.parent = self;
@@ -217,6 +196,15 @@ namespace rg
                         std::this_thread::yield();
                     }
                 }
+
+                // if(!coro.promise<promise_type>().task_done)
+                // {
+                //     std::unique_lock lock(coro.promise<promise_type>().mtx);
+                //     coro.promise<promise_type>().cv.wait(
+                //         lock,
+                //         [this] { return coro.promise<promise_type>().task_done; });
+                //     // todo make this exception safe
+                // }
 
                 // while(coro.use_count() > 1)
                 // {

@@ -12,6 +12,8 @@ namespace rg
 {
     struct BarrierQueue
     {
+        // Holds the task which has the continuation, a pointer to the current number of handles of the parent, and
+        // bool for if a handle is held by the user
         using barrier_tuple
             = std::tuple<std::coroutine_handle<>, std::atomic<SharedCoroutineHandle::TRefCount>*, bool*>;
 
@@ -23,22 +25,21 @@ namespace rg
             queue.reserve(reserve_size);
         }
 
-        void emplace_back(SharedCoroutineHandle const& sharedHandle, bool& coroOutsideTask)
+        void emplace_back(SharedCoroutineHandle const& sharedHandle, bool* coroOutsideTask)
         {
             std::lock_guard<std::mutex> lock(mtx);
-            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle.use_count_ptr(), &coroOutsideTask);
+            queue.emplace_back(sharedHandle.get_coroutine_handle(), sharedHandle.use_count_ptr(), coroOutsideTask);
         }
 
         // Iterate, remove elements with zero atomic value, and return their coroutine handles
         template<typename ThreadPool>
         void process_and_extract(ThreadPool* pool)
         {
-            std::lock_guard<std::mutex> lock(mtx);
-
-            // check if the barrier is ready
+            // lambda to check if the barrier is ready
             // use count of 1, since parent task holds self. All children are done if use count - num handles = 1
             auto is_ready = [](barrier_tuple const& tuple) { return *std::get<1>(tuple) - *std::get<2>(tuple) == 1; };
 
+            std::lock_guard<std::mutex> lock(mtx);
             // Remove elements with zero atomic value and collect their coroutine handles
             auto it = queue.begin();
             while(it != queue.end())

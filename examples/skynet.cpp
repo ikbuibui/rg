@@ -12,7 +12,7 @@ static size_t thread_count = std::thread::hardware_concurrency() / 2;
 static size_t const iter_count = 1;
 
 template<size_t DepthMax>
-rg::Task<size_t> skynet_one(size_t BaseNum, size_t Depth)
+rg::Task<size_t> skynet_one(rg::ThreadPool* ptr, size_t BaseNum, size_t Depth)
 {
     if(Depth == DepthMax)
     {
@@ -27,7 +27,7 @@ rg::Task<size_t> skynet_one(size_t BaseNum, size_t Depth)
     std::array<rg::Task<size_t>, 10> children;
     for(size_t idx = 0; idx < 10; ++idx)
     {
-        children[idx] = co_await rg::dispatch_task(skynet_one<DepthMax>, BaseNum + depthOffset * idx, Depth + 1);
+        children[idx] = co_await rg::dispatch_task(skynet_one<DepthMax>, ptr, BaseNum + depthOffset * idx, Depth + 1);
     }
 
     size_t count = 0;
@@ -39,9 +39,9 @@ rg::Task<size_t> skynet_one(size_t BaseNum, size_t Depth)
 }
 
 template<size_t DepthMax>
-rg::Task<void> skynet()
+rg::Task<void> skynet(rg::ThreadPool* ptr)
 {
-    auto handle = co_await rg::dispatch_task(skynet_one<DepthMax>, 0, 0);
+    auto handle = co_await rg::dispatch_task(skynet_one<DepthMax>, ptr, 0, 0);
     size_t count = co_await handle.get();
     if(count != 4'999'999'950'000'000)
     {
@@ -51,14 +51,14 @@ rg::Task<void> skynet()
 }
 
 template<size_t Depth = 6>
-rg::Task<void> loop_skynet()
+rg::Task<void> loop_skynet(rg::ThreadPool* ptr)
 {
     std::printf("runs:\n");
     auto startTime = std::chrono::high_resolution_clock::now();
     for(size_t j = 0; j < iter_count; ++j)
     {
-        co_await rg::dispatch_task(skynet<Depth>);
-        co_await rg::BarrierAwaiter{};
+        co_await rg::dispatch_task(skynet<Depth>, ptr);
+        co_await rg::barrier();
     }
 
     auto endTime = std::chrono::high_resolution_clock::now();
@@ -67,11 +67,11 @@ rg::Task<void> loop_skynet()
     std::printf("    duration: %" PRIu64 " us\n", totalTimeUs.count());
 }
 
-auto main_wrapper([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
+auto main_wrapper(rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
-    co_await rg::dispatch_task(skynet<8>); // warmup
-    co_await rg::BarrierAwaiter{};
-    co_await rg::dispatch_task(loop_skynet<8>);
+    co_await rg::dispatch_task(skynet<8>, ptr); // warmup
+    co_await rg::barrier();
+    co_await rg::dispatch_task(loop_skynet<8>, ptr);
     co_return 0;
 }
 

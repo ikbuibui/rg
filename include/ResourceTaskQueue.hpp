@@ -1,49 +1,58 @@
 
 #pragma once
 
+#include "ResourceAccess.hpp"
 #include "ThreadPool.hpp"
-#include "resources.hpp"
 #include "waitCounter.hpp"
 
 #include <array>
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
+#include <iostream>
 
 namespace rg
 {
-    struct task_access
+    struct TaskData
     {
         // TODO deal with type erasure, need to call promise
         std::coroutine_handle<> handle; // Coroutine handle
         std::atomic<TWaitCount>* waitCounter_p{};
-        AccessMode accessMode;
+        ThreadPool* pool_ptr{nullptr};
+        // uninitialized for a default constructed
+        AccessMode accessMode{AccessMode::Uninitialized};
         // remove state 0 - default
         // remove state 1 - removed
         bool remove_state = 0;
 
         // TODO try passing T as parameter and then constructing
         template<typename TAccess>
-        task_access(std::coroutine_handle<> coro_handle, TAccess&& mode, std::atomic<uint32_t>* waitCtr_p)
+        TaskData(
+            std::coroutine_handle<> coro_handle,
+            TAccess&& mode,
+            std::atomic<uint32_t>* waitCtr_p,
+            ThreadPool* pool_p)
             : handle(coro_handle)
             , waitCounter_p{waitCtr_p}
+            , pool_ptr(pool_p)
             , accessMode(std::forward<TAccess>(mode))
         {
         }
 
         // TODO think about default access mode and waitPtr
-        task_access() : handle(nullptr)
+        TaskData() : handle(nullptr)
         {
         }
 
-        task_access(task_access const&) = delete;
-        task_access(task_access&&) = default;
-        task_access& operator=(task_access const&) = delete;
-        task_access& operator=(task_access&&) = default;
-        ~task_access() = default;
+        TaskData(TaskData const&) = delete;
+        TaskData(TaskData&&) = default;
+        TaskData& operator=(TaskData const&) = delete;
+        TaskData& operator=(TaskData&&) = default;
+        ~TaskData() = default;
     };
 
     // ResourceTaskQueue struct with firstNotReady and notify function
+    // Doesnt do any bounds checking
     struct ResourceTaskQueue
     {
     private:
@@ -52,28 +61,18 @@ namespace rg
             = 0; // Iterator to the first not-ready task
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> last
             = 0; // Iterator to one past the last task
-        uint32_t resource_uid; // Unique identifier for the resource
-        std::array<task_access, 1024> tasks;
+        // TODO replace with deque for stable iterators
+        std::array<TaskData, 1024> tasks{};
 
     public:
-        // Constructor
-        ResourceTaskQueue(uint32_t uid) : resource_uid(uid), tasks{}
-        {
-            // std::cout << "node id : " << resource_uid << " created" << std::endl;
-        }
-
-        auto getId() const
-        {
-            return resource_uid;
-        }
-
         // Add a task to the list, incremenets wait counter of task if task is not immidiately ready to run
         // TODO think about rvalue reference
-        // TODO think about returning somethin useful. Maybe bool telling if it is ready
+        // TODO think about returning something useful. Maybe bool telling if it is ready
+        // returns a pointer to the
         // Constraints: Assumes that add_task can only be called by one thread at a time
         // Usage note: the wait counter of the handle add task is called on must be incremented before calling this
         //             function
-        void add_task(task_access&& task)
+        TaskData* add_task(TaskData&& task)
         {
             // simply add the task to the end
             auto old_last = last.load(std::memory_order_acquire);
@@ -107,16 +106,18 @@ namespace rg
                     }
                 }
             }
+            return &tasks[old_last];
         }
 
         // Removes all active tasks from the list which have a handle
         // Task is not guaranteed to be present in this ResourceTaskQueue, may not be registered here
         // TODO: maybe return some useful info
         // doesnt need to be a templated type, type erased handle is enough
-        void remove_task(std::coroutine_handle<> handle, ThreadPool* pool_p)
+        void remove_task(TaskData* tData)
         {
+            // TODO ues pointer directly instead of search
             auto cur = first.load(std::memory_order_acquire);
-            if(tasks[cur].handle == handle)
+            if(tasks[cur].handle == tData->handle)
             {
                 // start to really remove tasks
                 cur = first.fetch_add(1, std::memory_order_acq_rel) + 1;
@@ -157,7 +158,7 @@ namespace rg
                 // TODO remove while loop by also storing position in resource node in the task promise
                 while(cur != fnr)
                 {
-                    if(tasks[cur].handle == handle)
+                    if(tasks[cur].handle == tData->handle)
                     {
                         // delete the node
                         // publish as removed (Here publish state before checking first. While actually deleting we
@@ -218,7 +219,7 @@ namespace rg
             // start updating tasks
             auto fnr = firstNotReady.load(std::memory_order_acquire);
             auto temp_last = last.load(std::memory_order_acquire);
-            AccessMode firstNewReadyMode;
+            AccessMode firstNewReadyMode{AccessMode::Uninitialized};
             // no more running tasks and there is atleast one not ready task
             // this task is next in line to run. Nothing is blocking it
             if(fnr == cur && temp_last != cur)
@@ -230,7 +231,7 @@ namespace rg
                     if(tasks[fnr].waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         // move handle to ready tasks queue
-                        pool_p->addTask(tasks[fnr].handle);
+                        tData->pool_ptr->addTask(tasks[fnr].handle);
                     }
                     ++fnr;
                 }
@@ -258,8 +259,13 @@ namespace rg
                     {
                         if(tasks[fnr].waitCounter_p->fetch_sub(1, std::memory_order_acq_rel) == 1)
                         {
+                            if(!tData->pool_ptr)
+                            {
+                                std::cerr << "ResourceTaskQueue: No pool_ptr set" << std::endl;
+                            }
+
                             // move handle to ready tasks queue
-                            pool_p->addTask(tasks[fnr].handle);
+                            tData->pool_ptr->addTask(tasks[fnr].handle);
                         }
                         ++fnr;
                     }

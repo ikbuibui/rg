@@ -1,46 +1,16 @@
 #pragma once
 
+#include "ResourceAccess.hpp"
+#include "ResourceTaskQueue.hpp"
+#include "traits.hpp"
+
 #include <atomic>
 #include <cstdint>
-#include <functional>
 #include <memory>
-#include <optional>
 #include <utility>
-#include <variant>
 
 namespace rg
 {
-    enum class AccessMode : uint8_t
-    {
-        Read,
-        Write,
-        AAdd,
-        AMul,
-    };
-
-    namespace range_access
-    {
-        struct read
-        {
-            using access_type = read;
-        };
-
-        struct write
-        {
-            using access_type = write;
-        };
-
-        struct aadd
-        {
-            using access_type = aadd;
-        };
-
-        struct amul
-        {
-            using access_type = amul;
-        };
-
-    } // namespace range_access
 
     // Global ID generator
     class GlobalIDGenerator
@@ -58,302 +28,99 @@ namespace rg
     // Initialize the global ID counter
     std::atomic<uint32_t> GlobalIDGenerator::id_counter = 0;
 
-    // template<typename T, uint32_t ResourceID, typename AccessMode>
-    // struct ResourceHandle
-    // {
-    //     using value_type = T&;
-    //     using access_type = typename AccessMode::access_type;
-    //     static constexpr uint32_t resource_id = ResourceID;
+    // ResourceHandle
 
-    //     // handle
-    //     T& obj;
-
-    //     ResourceHandle(T&& t) : obj(std::forward<T>(t))
-    //     {
-    //     }
-    // };
-
-    // template<uint32_t ResourceID, typename AccessMode>
-    // struct ResourceAccess
-    // {
-    //     static constexpr uint32_t resource_id = ResourceID;
-    //     using access_type = AccessMode::access_type;
-    // };
-
-    // // Concept to ensure a type is ResourceAccess
-    // template<typename T>
-    // concept IsResourceHandle = requires {
-    //     // Must have a static constexpr variable `resource_id`
-    //     T::resource_id;
-    //     // Must have a nested `value_type` type
-    //     typename T::value_type;
-    //     // Must have a nested `access_type` type
-    //     typename T::access_type;
-    //     // must have obj which is the type which is bound to the callable
-    //     T::obj;
-    // };
-
-    // template<typename... Ts>
-    // struct TypeList
-    // {
-    //     template<typename Func>
-    //     static constexpr void for_each(Func&& func)
-    //     {
-    //         (func.template operator()<Ts>(), ...); // Fold expression
-    //     }
-    // };
-
-    // template<typename T>
-    // struct ExtractResourceID;
-
-    // template<typename T, uint32_t ResourceID, typename AccessMode>
-    // struct ExtractResourceID<ResourceHandle<T, ResourceID, AccessMode>>
-    // {
-    //     using id = std::integral_constant<uint32_t, ResourceHandle<T, ResourceID, AccessMode>::resource_id>;
-    // };
-
-    // template<typename Tuple, std::size_t... Is>
-    // auto extractResourceIDsImpl(std::index_sequence<Is...>)
-    // {
-    //     return TypeList<typename ExtractResourceID<std::tuple_element_t<Is, Tuple>>::id...>{};
-    // }
-
-    // template<typename Callable, typename... Args>
-    // struct ResourceIDExtractor
-    // {
-    //     using TupleType = std::tuple<Args...>;
-
-    //     using type = decltype(extractResourceIDsImpl<TupleType>(std::make_index_sequence<sizeof...(Args)>{}));
-    // };
 
     template<typename T>
-    concept HasAccessType = requires { typename T::access_type; };
-
-    template<typename T>
-    concept NotAccessType = !HasAccessType<T>;
-
-    // TODO think one for IOResources and another for others?
-    bool is_serial_access(AccessMode const a, AccessMode const b)
+    struct ResNode
     {
-        return (a != AccessMode::Read || b != AccessMode::Read) && (a != AccessMode::AAdd || b != AccessMode::AAdd)
-               && (a != AccessMode::AMul || b != AccessMode::AMul);
-    }
+        T resource;
+        // Unique identifier for the resource
+        uint32_t resource_uid;
+        mutable ResourceTaskQueue userQueue{};
 
-    // Function to bind Combined value to a callable
-    // template<typename T, typename AccessMode, uint32_t ResourceID, typename Func>
-    // auto bindToCallable(ResourceHandle<T, ResourceID, AccessMode> const& combined, Func&& f)
-    // {
-    //     // Use std::bind to create a callable with the value from combined.ptr
-    //     return std::bind(std::forward<Func>(f), *combined.ptr);
-    // }
+        // TODO store value here
+        // construct by value and move in. Has by value container semantics
+        // if the user wants to pass a reference, they can use a reference wrapper
 
-    // template<typename T, uint32_t ResourceID>
-    // class IOResource : public T
-    // {
-    // public:
-    //     using T::T;
-
-    // TODO overload on const
-
-    //     ResourceHandle<T const&, ResourceID, access::read> rg_read()
-    //     {
-    //         return {static_cast<T const>(this)};
-    //     }
-
-    //     ResourceHandle<T&, ResourceID, access::write> rg_write()
-    //     {
-    //         return {static_cast<T>(this)};
-    //     }
-    // };
-
-    // template<typename T, uint32_t ResourceID>
-    // class IOResource
-    // {
-    // public:
-    //     T& obj;
-
-    //     // Constructor for both value and reference types
-    //     template<typename U>
-    //     requires std::is_constructible_v<T, U&&>
-    //     explicit IOResource(U&& value) : obj(std::forward<U>(value))
-    //     {
-    //     }
-
-    //     ResourceHandle<T const, ResourceID, access::read> rg_read()
-    //     {
-    //         return {static_cast<T const>(obj)};
-    //     }
-
-    //     ResourceHandle<T, ResourceID, access::write> rg_write()
-    //     {
-    //         return {static_cast<T>(obj)};
-    //     }
-    // };
-
-
-    // template<typename T>
-    // class IOResource
-    // {
-    // private:
-    //     uint32_t ResourceID;
-
-    // public:
-    //     T obj;
-
-    //     // Constructor for both value and reference types
-    //     template<typename U>
-    //     requires std::is_constructible_v<T, U&&>
-    //     explicit IOResource(U&& value) : obj(std::forward<U>(value))
-    //     {
-    //     }
-
-    //     ResourceHandle<T const, ResourceID, access::read> rg_read()
-    //     {
-    //         return {static_cast<T const>(obj)};
-    //     }
-
-    //     ResourceHandle<T, ResourceID, access::write> rg_write()
-    //     {
-    //         return {static_cast<T>(obj)};
-    //     }
-    // };
-
-    // // constructs from T, maybe  construct from args. liek empalce back
-    // template<uint32_t ResourceID, typename T>
-    // auto makeIOResource(T&& t)
-    // {
-    //     // TODO use a better counter
-    //     return IOResource<T, ResourceID>{std::forward<T>(t)};
-    // }
-
-
-    // forward declaration to hold shared pointer
-    struct ResourceTaskQueue;
-
-    template<typename TRes>
-    class ResourceAccess
-    {
-    private:
-        std::reference_wrapper<TRes> resource;
-        AccessMode accessMode;
-
-    public:
-        using access_type = AccessMode;
-
-        // using value_type = T&;
-
-        ResourceAccess(TRes& r, AccessMode access) : resource(r), accessMode(access)
+        ResNode(T const& res) : resource{res}, resource_uid(GlobalIDGenerator::generate_id())
         {
         }
 
-        auto const& get() const
+        ResNode(T&& res) : resource{std::move(res)}, resource_uid(GlobalIDGenerator::generate_id())
         {
-            return resource.get().get();
         }
 
-        auto& get()
+        ResNode() requires std::default_initializable<T>
+            : resource{}
+            , resource_uid(GlobalIDGenerator::generate_id())
         {
-            return resource.get().get();
         }
 
-        // read only get?
-        // T const& get() const
-        // {
-        //     return resource.get().get();
-        // }
-
-        uint32_t getID() const
+        auto getId() const
         {
-            return resource.get().getUserQueue()->getId();
-        }
-
-        std::shared_ptr<ResourceTaskQueue> const& getUserQueue() const
-        {
-            return resource.get().getUserQueue();
-        }
-
-        AccessMode const& getAccessMode() const
-        {
-            return accessMode;
+            return resource_uid;
         }
     };
 
+    // has value semantics. If you want to store a reference, pass a std::ref
     template<typename T>
-    class Resource
+    class Resource : public IOAccess<Resource<T>>
     {
-    private:
-        // std::optional<T> value; // Stores an object if owning
-        // T* ref = nullptr; // Stores a reference if non-owning
-        // Use std::variant to manage storage of value or reference
-        std::variant<T, std::reference_wrapper<T>> storage;
+    public:
+        // TODO change to private
+        using ResNodeType = ResNode<T>;
 
-        std::shared_ptr<ResourceTaskQueue> userQueue
-            = std::make_shared<ResourceTaskQueue>(GlobalIDGenerator::generate_id());
+    private:
+        std::shared_ptr<ResNodeType> resNode;
 
     public:
-        Resource(T& ref) : storage(std::forward<std::reference_wrapper<T>>(ref))
-        //       Resource(T const& r)
-        // : ref(&r)
-        {
-        }
-
-        // Constructor for rvalue (temporary value)
-        Resource(T&& value) : storage(std::move(value))
-        //       Resource(T && val)
-        // : value(std::move(val))
-        // , ref(&*value)
+        [[nodiscard]] Resource(T value) : resNode(std::make_shared<ResNodeType>(std::move(value)))
         {
         }
 
         // Resource() : value(std::move(T{}))
-        Resource() : storage(std::move(T{}))
+        [[nodiscard]] Resource() requires std::default_initializable<T>
+            : resNode(std::make_shared<ResNodeType>())
         {
             // std::cout << "Default construct T" << std::endl;
         }
 
-        std::shared_ptr<ResourceTaskQueue> const& getUserQueue() const
+        // template<typename U>
+        // requires std::convertible_to<U*, ResNodeType*>
+        // Resource(Resource<U> const& other) : resNode(other.resNode)
+        // {
+        // }
+
+        // template<typename U>
+        // requires std::convertible_to<U*, ResNodeType*>
+        // Resource(Resource<U>&& other) noexcept : resNode(std::move(other.resNode))
+        // {
+        // }
+
+        ResNodeType const& getResNode() const
         {
-            return userQueue;
+            return *resNode;
+        }
+
+        ResNodeType& getResNode()
+        {
+            return *resNode;
         }
 
         T& get()
         {
-            if(std::holds_alternative<std::reference_wrapper<T>>(storage))
-            {
-                return std::get<std::reference_wrapper<T>>(storage).get();
-            }
-            else
-            {
-                return std::get<T>(storage);
-            }
-            // return *ref;
+            return resNode->resource;
         }
 
         T const& get() const
         {
-            if(std::holds_alternative<std::reference_wrapper<T>>(storage))
-            {
-                return std::get<std::reference_wrapper<T>>(storage).get();
-            }
-            else
-            {
-                return std::get<T>(storage);
-            }
-            // return *ref;
-        }
-
-        // Read accessor
-        ResourceAccess<Resource const> rg_read() const
-        {
-            return {*this, AccessMode::Read};
-        }
-
-        // Write  accessor
-        ResourceAccess<Resource> rg_write()
-        {
-            return {*this, AccessMode::Write};
+            return resNode->resource;
         }
     };
+
+    template<typename T>
+    concept IsResource = traits::is_specialization_of_v<std::remove_cvref_t<T>, Resource>;
 
 
 } // namespace rg

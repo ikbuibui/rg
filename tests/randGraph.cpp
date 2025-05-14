@@ -7,7 +7,6 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
-#include <memory>
 #include <random>
 #include <thread>
 #include <vector>
@@ -30,7 +29,7 @@ void hash(unsigned task_id, std::array<uint64_t, 8>& val)
 
 std::chrono::microseconds task_duration(2);
 static unsigned const n_resources = 16;
-static unsigned const n_tasks = 128;
+static unsigned const n_tasks = 1024;
 static unsigned const n_threads = 8;
 static unsigned const min_dependencies = 0;
 static unsigned const max_dependencies = 5;
@@ -95,15 +94,9 @@ void print(Container c)
     std::cout << "}";
 }
 
-auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
+auto test(rg::ThreadPool* ptr) -> rg::InitTask<int>
 {
-    std::vector<rg::Resource<std::shared_ptr<std::array<uint64_t, 8>>>> resources(n_resources);
-
-    // Default initialize each element in-place
-    for(auto& res : resources)
-    {
-        res = rg::Resource(std::make_shared<std::array<uint64_t, 8>>());
-    }
+    std::vector<rg::Resource<std::array<uint64_t, 8>>> resources(n_resources);
 
     for(unsigned i = 0; i < n_tasks; ++i)
         switch(access_pattern[i].size())
@@ -111,36 +104,39 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
         case 0:
             {
                 co_await rg::dispatch_task<false, false>(
-                    []() -> rg::Task<void>
+                    []([[maybe_unused]] rg::ThreadPool* ptr) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         co_return;
-                    });
+                    },
+                    ptr);
                 break;
             }
         case 1:
             {
-                co_await rg::dispatch_task<false, true>(
-                    [](auto ra1, auto i) -> rg::Task<void>
+                co_await rg::dispatch_task<false, false>(
+                    []([[maybe_unused]] rg::ThreadPool* ptr, auto ra1, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
                         co_return;
                     },
+                    ptr,
                     resources[access_pattern[i][0]].rg_write(),
                     i);
                 break;
             }
         case 2:
             {
-                co_await rg::dispatch_task<false, true>(
-                    [](auto ra1, auto ra2, auto i) -> rg::Task<void>
+                co_await rg::dispatch_task<false, false>(
+                    []([[maybe_unused]] rg::ThreadPool* ptr, auto ra1, auto ra2, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
                         hash(i, *ra2);
                         co_return;
                     },
+                    ptr,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     i);
@@ -148,8 +144,9 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 3:
             {
-                co_await rg::dispatch_task<false, true>(
-                    [](auto ra1, auto ra2, auto ra3, auto i) -> rg::Task<void>
+                co_await rg::dispatch_task<false, false>(
+                    []([[maybe_unused]] rg::ThreadPool* ptr, auto ra1, auto ra2, auto ra3, unsigned i)
+                        -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
@@ -157,6 +154,7 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
                         hash(i, *ra3);
                         co_return;
                     },
+                    ptr,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     resources[access_pattern[i][2]].rg_write(),
@@ -165,8 +163,9 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 4:
             {
-                co_await rg::dispatch_task<false, true>(
-                    [](auto ra1, auto ra2, auto ra3, auto ra4, auto i) -> rg::Task<void>
+                co_await rg::dispatch_task<false, false>(
+                    []([[maybe_unused]] rg::ThreadPool* ptr, auto ra1, auto ra2, auto ra3, auto ra4, unsigned i)
+                        -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
@@ -175,6 +174,7 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
                         hash(i, *ra4);
                         co_return;
                     },
+                    ptr,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     resources[access_pattern[i][2]].rg_write(),
@@ -184,8 +184,14 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
             }
         case 5:
             {
-                co_await rg::dispatch_task<false, true>(
-                    [](auto ra1, auto ra2, auto ra3, auto ra4, auto ra5, auto i) -> rg::Task<void>
+                co_await rg::dispatch_task<false, false>(
+                    []([[maybe_unused]] rg::ThreadPool* ptr,
+                       auto ra1,
+                       auto ra2,
+                       auto ra3,
+                       auto ra4,
+                       auto ra5,
+                       unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
@@ -195,6 +201,7 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
                         hash(i, *ra5);
                         co_return;
                     },
+                    ptr,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     resources[access_pattern[i][2]].rg_write(),
@@ -206,12 +213,21 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
         }
 
     std::cout << "tasks created" << std::endl;
-    co_await rg::BarrierAwaiter{resources};
+    // co_await rg::dispatch_task<true, false>(
+    //     []([[maybe_unused]] rg::ThreadPool* ptr) -> rg::Task<void>
+    //     {
+    //         sleep(task_duration * 1000);
+    //         co_return;
+    //     },
+    //     ptr);
+
+    co_await rg::barrier();
+
     std::cout << "starting check" << std::endl;
 
     for(unsigned i{0}; i < n_resources; ++i)
     {
-        auto f = [](auto res, auto i) -> rg::Task<int>
+        auto f = []([[maybe_unused]] rg::ThreadPool* ptr, auto res, auto i) -> rg::Task<int>
         {
             if(*res != expected_hash[i])
             {
@@ -228,10 +244,8 @@ auto test([[maybe_unused]] rg::ThreadPool* ptr) -> rg::InitTask<int>
             co_return 0;
         };
 
-        co_await rg::dispatch_task(f, resources[i].rg_read(), i);
+        co_await rg::dispatch_task(f, ptr, resources[i].rg_read(), i);
     }
-
-    // std::this_thread::sleep_for(std::chrono::seconds(15));
     co_return 0;
 }
 

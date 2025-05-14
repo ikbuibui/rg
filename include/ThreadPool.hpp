@@ -5,7 +5,6 @@
 #include "dequeue.hpp"
 #include "hwloc_ctx.hpp"
 #include "random.hpp"
-
 // #include <boost/lockfree/stack.hpp>
 #include <hwloc.h>
 
@@ -32,9 +31,6 @@ namespace rg
         //     = boost::lockfree::stack<std::coroutine_handle<>, boost::lockfree::capacity<threadPoolStackSize>>;
         // using stack_type = rigtorp::MPMCQueue<std::coroutine_handle<>>;
         using stack_type = riften::Deque<std::coroutine_handle<>>;
-
-        template<typename... ResArgs>
-        friend struct BarrierAwaiter;
 
     private:
         // bitfield where 0 is free and 1 is busy
@@ -120,6 +116,11 @@ namespace rg
         //     // stack.bounded_push(h);
         //     stack.push(h);
         // }
+
+        void addBarrier(SharedCoroutineHandle const& sharedHandle, bool& coroOutsideTask)
+        {
+            barrier_queue.emplace_back(sharedHandle, &coroOutsideTask);
+        }
 
         void finalize() const
         {
