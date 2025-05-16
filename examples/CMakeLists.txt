@@ -24,4 +24,4 @@ foreach(EXAMPLE ${EXAMPLES})
 endforeach()
 
 # Add the heatEquation2D example
-add_subdirectory(heatEquation2D)
+# add_subdirectory(heatEquation2D)

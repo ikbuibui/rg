@@ -4,6 +4,7 @@
 #include <cassert>
 #include <coroutine>
 #include <stdexcept>
+#include <utility>
 
 namespace rg
 {
@@ -46,11 +47,9 @@ namespace rg
         }
 
         SharedCoroutineHandle(SharedCoroutineHandle&& other) noexcept
-            : address_(std::move(other.address_))
-            , ref_count_(std::move(other.ref_count_))
+            : address_(std::exchange(other.address_, nullptr))
+            , ref_count_(std::exchange(other.ref_count_, nullptr))
         {
-            other.address_ = nullptr;
-            other.ref_count_ = nullptr;
         }
 
         // If this is the last object alive, and you assign to itself, it will burn
@@ -72,10 +71,8 @@ namespace rg
             if(this != &other)
             {
                 decrement_ref();
-                address_ = other.address_;
-                ref_count_ = other.ref_count_;
-                other.address_ = nullptr;
-                other.ref_count_ = nullptr;
+                address_ = std::exchange(other.address_, nullptr);
+                ref_count_ = std::exchange(other.ref_count_, nullptr);
             }
 
             return *this;
@@ -85,11 +82,8 @@ namespace rg
         // is destroyed on decrement (since handle might be held in the coroutine frame)
         void reset()
         {
-            auto local_address_copy = address_;
-            auto local_ref_count_copy = ref_count_;
-
-            address_ = nullptr;
-            ref_count_ = nullptr;
+            auto local_address_copy = std::exchange(address_, nullptr);
+            auto local_ref_count_copy = std::exchange(ref_count_, nullptr);
 
             if(local_ref_count_copy && local_ref_count_copy->fetch_sub(1, std::memory_order_acq_rel) == 1)
             {
@@ -99,12 +93,6 @@ namespace rg
 
         // Checks if the handle is valid
         explicit operator bool() const noexcept
-        {
-            return address_ != nullptr;
-        }
-
-        // checks if the object was ever initialized. It may be in an invalid state
-        bool is_init() const noexcept
         {
             return address_ != nullptr;
         }

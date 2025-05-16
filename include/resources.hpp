@@ -75,7 +75,11 @@ namespace rg
         std::shared_ptr<ResNodeType> resNode;
 
     public:
-        [[nodiscard]] Resource(T value) : resNode(std::make_shared<ResNodeType>(std::move(value)))
+        [[nodiscard]] Resource(T const& value) : resNode(std::make_shared<ResNodeType>(value))
+        {
+        }
+
+        [[nodiscard]] Resource(T&& value) : resNode(std::make_shared<ResNodeType>(std::move(value)))
         {
         }
 
