@@ -1,8 +1,8 @@
 #pragma once
 
+#include "Resource.hpp"
 #include "Task.hpp"
 #include "ThreadPool.hpp"
-#include "resources.hpp"
 
 #include <coroutine>
 #include <type_traits>
@@ -29,7 +29,8 @@ namespace rg
         // BarrierAwaiter(TArgs... res) : resArgs(std::move(res)...)
         // {
         // }
-        BarrierAwaiter(TArgs&... args) requires((IsResource<TArgs> && ... ) ) : resArgs(std::ref(args)...)
+        BarrierAwaiter(TArgs&... args) requires((IsResource<TArgs> && ...))
+            : resArgs(std::ref(args)...)
         {
         }
 
