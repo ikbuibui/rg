@@ -1,6 +1,9 @@
 #pragma once
 
+#include "Context.hpp"
+#include "SharedCoroutineHandle.hpp"
 #include "ThreadPool.hpp"
+#include "initTask.hpp"
 
 #include <concepts>
 
@@ -15,12 +18,13 @@ namespace rg
         {
         }
 
-        ThreadPool* pool_ptr()
+        Context getContext()
         {
-            return &pool;
+            return Context(emptyHandle, &pool);
         }
 
     private:
+        SharedCoroutineHandle emptyHandle{};
         ThreadPool pool;
     };
 

@@ -1,9 +1,9 @@
 #pragma once
 
+#include "Context.hpp"
 #include "FinalDelete.hpp"
 #include "SharedCoroutineHandle.hpp"
 #include "ThreadPool.hpp"
-#include "dispatchTask.hpp"
 #include "waitCounter.hpp"
 
 #include <condition_variable>
@@ -73,12 +73,13 @@ namespace rg
             bool coroOutsideTask = true;
 
             template<typename... Args>
-            promise_type(ThreadPool* ptr, Args&&...)
-                : pool_p{ptr}
+            promise_type(Context& ctx, Args&&...)
+                : pool_p{ctx.poolPtr}
                 , self{SharedCoroutineHandle(
                       std::coroutine_handle<promise_type>::from_promise(*this),
                       sharedOwnerCounter)}
             {
+                ctx.handleRef = std::ref(self);
             }
 
             InitTask get_return_object()
@@ -113,35 +114,6 @@ namespace rg
             void return_value(U&& value)
             {
                 result = std::forward<U>(value);
-            }
-
-            // TODO contrain args to resource concept
-            // TODO think about moving or passing by reference for awaiter
-            template<typename U, bool Synchronous, bool finishedOnReturn>
-            auto await_transform(DispatchAwaiter<U, Synchronous, finishedOnReturn> awaiter)
-            {
-                // Init
-                auto& awaiter_promise
-                    = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
-                if constexpr(!finishedOnReturn)
-                {
-                    awaiter_promise.parent = self;
-                }
-
-                // Init over
-
-                // if(resourcesReady)
-                //   return awaiter that suspends, adds continuation to stack, and executes task
-                // elseif resources not ready
-                //   task has been initialized with wait counter, waits for child notification to add to ready queue
-                //   return awaiter that suspend never (executes the continuation)
-                return awaiter;
-            }
-
-            template<typename NonDispatchAwaiter>
-            auto await_transform(NonDispatchAwaiter&& aw)
-            {
-                return std::forward<NonDispatchAwaiter>(aw);
             }
         };
 

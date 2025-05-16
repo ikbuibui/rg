@@ -7,28 +7,28 @@
 static size_t thread_count = std::thread::hardware_concurrency() / 2;
 static size_t const iter_count = 1;
 
-inline auto fib(rg::ThreadPool* ptr, size_t n) -> rg::Task<size_t>
+inline auto fib(rg::Context ctx, size_t n) -> rg::Task<size_t>
 {
     if(n < 2)
     {
         co_return n;
     }
 
-    auto a = co_await rg::dispatch_task<false, true>(fib, ptr, n - 1);
-    auto b = co_await rg::dispatch_task<true, true>(fib, ptr, n - 2);
+    auto a = co_await rg::dispatch_task<false, true>(fib, ctx, n - 1);
+    auto b = co_await rg::dispatch_task<true, true>(fib, ctx, n - 2);
     co_return co_await a.get() + b;
 };
 
-auto main_wrapper(rg::ThreadPool* ptr, size_t n) -> rg::InitTask<int>
+auto main_wrapper(rg::Context ctx, size_t n) -> rg::InitTask<int>
 {
-    co_await rg::dispatch_task(fib, ptr, 30);
+    co_await rg::dispatch_task(fib, ctx, 30);
     co_await rg::barrier();
     std::printf("results:\n");
     auto startTime = std::chrono::high_resolution_clock::now();
 
     for(size_t i = 0; i < iter_count; ++i)
     {
-        auto result = co_await rg::dispatch_task(fib, ptr, n);
+        auto result = co_await rg::dispatch_task(fib, ctx, n);
         std::printf("  - %" PRIu64 "\n", co_await result.get());
     }
 
@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
     std::printf("threads: %" PRIu64 "\n", thread_count);
 
     auto poolObj = rg::init(thread_count);
-    auto a = main_wrapper(poolObj.pool_ptr(), n);
+    auto a = main_wrapper(poolObj.getContext(), n);
 
     return 0;
 }

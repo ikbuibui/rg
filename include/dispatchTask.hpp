@@ -5,7 +5,6 @@
 #include <atomic>
 #include <cassert>
 #include <coroutine>
-#include <cstdint>
 #include <utility>
 
 namespace rg

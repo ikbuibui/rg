@@ -35,7 +35,7 @@
 //! selected accelerator only. If you use the example as the starting point for your project, you can rename the
 //! example() function to main() and move the accelerator tag to the function body.
 template<typename T_Cfg>
-auto example(T_Cfg const& cfg) -> int
+auto example(rg::Context ctx, T_Cfg const& cfg) -> rg::InitTask<int>
 {
     using namespace alpaka;
     using namespace alpaka::onHost;
@@ -77,26 +77,32 @@ auto example(T_Cfg const& cfg) -> int
     {
         std::cerr << "Stability condition check failed: dt/min(dx^2,dy^2) = " << r
                   << ", it is required to be <= 0.5\n";
-        return EXIT_FAILURE;
+        co_return EXIT_FAILURE;
     }
 
     // Initialize host-buffer
     // This buffer will hold the current values (used for the next step)
-    auto uBufHost = alpaka::onHost::alloc<double>(devHost, extent);
+    auto uBufHost = rg::Resource(alpaka::onHost::alloc<double>(devHost, extent));
 
     // Accelerator buffer
-    auto uCurrBufAcc = alpaka::onHost::allocMirror(devAcc, uBufHost);
-    auto uNextBufAcc = alpaka::onHost::allocMirror(devAcc, uBufHost);
+    auto uCurrBufAcc = rg::Resource(alpaka::onHost::allocMirror(devAcc, uBufHost.get()));
+    auto uNextBufAcc = rg::Resource(alpaka::onHost::allocMirror(devAcc, uBufHost.get()));
 
     // Set buffer to initial conditions
-    initalizeBuffer(uBufHost.getMdSpan(), dx, dy);
+    initalizeBuffer(uBufHost.get().getMdSpan(), dx, dy);
 
     // Select queue
     Queue dumpQueue = devAcc.makeQueue();
     Queue computeQueue = devAcc.makeQueue();
 
     // Copy host -> device
-    alpaka::onHost::memcpy(computeQueue, uCurrBufAcc, uBufHost);
+    co_await rg::dispatch_task(
+        [](auto computeQueue, auto uCurrBufAcc, auto uBufHost) -> rg::Task<void>
+        { alpaka::onHost::memcpy(computeQueue, uCurrBufAcc, uBufHost); },ctx,
+        computeQueue,
+        uCurrBufAcc.rg_write(),
+        uBufHost.rg_read());
+
     alpaka::onHost::wait(computeQueue);
 
     // Appropriate chunk size to split your problem for your Acc
@@ -183,19 +189,23 @@ auto example(T_Cfg const& cfg) -> int
     if(resultIsCorrect)
     {
         std::cout << "Execution results correct!" << std::endl;
-        return EXIT_SUCCESS;
+        co_return EXIT_SUCCESS;
     }
     else
     {
         std::cout << "Execution results incorrect: Max error = " << maxError << " (the grid resolution may be too low)"
                   << std::endl;
-        return EXIT_FAILURE;
+        co_return EXIT_FAILURE;
     }
 }
 
 auto main() -> int
 {
     using namespace alpaka;
+
+    constexpr auto num_threads = 6u;
+    auto poolObj = rg::init(num_threads);
+
     // Execute the example once for each enabled accelerator.
     // If you would like to execute it for a single accelerator only you can use the following code.
     //  \code{.cpp}
@@ -208,6 +218,6 @@ auto main() -> int
     //   TagCpuOmp2Threads, TagCpuSycl, TagCpuTbbBlocks, TagCpuThreads,
     //   TagFpgaSyclIntel, TagGenericSycl, TagGpuSyclIntel
     return executeForEach(
-        [=](auto const& tag) { return example(tag); },
+        [&](auto const& tag) { return example(poolObj.pool_ptr(), tag).get(); },
         onHost::allExecutorsAndApis(onHost::enabledApis));
 }

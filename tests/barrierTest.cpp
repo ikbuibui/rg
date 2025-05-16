@@ -13,19 +13,19 @@ struct DummyResourceData
 };
 
 // The core test logic, refactored into an rg::InitTask.
-auto barrier_test_logic(rg::ThreadPool* pool_ptr) -> rg::InitTask<int>
+auto barrier_test_logic(rg::Context ctx) -> rg::InitTask<int>
 {
     rg::Resource<DummyResourceData> resource1;
 
     auto handle = co_await rg::dispatch_task(
-        [](rg::ThreadPool*, auto) -> rg::Task<int>
+        [](rg::Context, auto) -> rg::Task<int>
         {
             std::cout << "going to sleep" << std::endl;
             std::this_thread::sleep_for(std::chrono::seconds(2));
             std::cout << "waking from sleep" << std::endl;
             co_return 1;
         },
-        pool_ptr,
+        ctx,
         resource1.rg_write());
 
     std::cout << "before barrier" << std::endl;
@@ -33,13 +33,13 @@ auto barrier_test_logic(rg::ThreadPool* pool_ptr) -> rg::InitTask<int>
     std::cout << "after barrier" << std::endl;
     std::cout << "output value " << co_await handle.get() << std::endl;
     co_await rg::dispatch_task(
-        [](rg::ThreadPool*, auto res_access) -> rg::Task<void>
+        [](rg::Context, auto res_access) -> rg::Task<void>
         {
             std::cout << "second access to resource" << std::endl;
             (*res_access).value = 42;
             co_return;
         },
-        pool_ptr,
+        ctx,
         resource1.rg_write());
 
     co_return 1;
@@ -49,5 +49,5 @@ int main()
 {
     auto poolScope = rg::init(2u);
 
-    auto a = barrier_test_logic(poolScope.pool_ptr());
+    auto a = barrier_test_logic(poolScope.getContext());
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Context.hpp"
 #include "CoroAllocator.hpp"
 #include "FinalDelete.hpp"
 #include "ResourceTaskQueue.hpp"
@@ -76,7 +77,7 @@ namespace rg
         template<typename U, bool synchronous, bool finishedOnReturn>
         friend struct DispatchAwaiter;
 
-        template<IsResource... TArgs>
+        template<typename... TArgs>
         friend struct BarrierAwaiter;
 
         using promise_type = task_promise<T>;
@@ -173,11 +174,13 @@ namespace rg
         // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly
         // dangle
         template<typename... Args>
-        task_promise(ThreadPool* ptr, Args&... args)
-            : pool_p{ptr}
+        task_promise(Context& ctx, Args&... args)
+            : pool_p{ctx.poolPtr}
+            , parent{ctx.handleRef}
             , self{SharedCoroutineHandle(std::coroutine_handle<task_promise>::from_promise(*this), sharedOwnerCounter)}
         {
             constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
+            ctx.handleRef = std::ref(self);
             resourceUsage.reserve(resource_counter);
             waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
             // Register task to resources
@@ -202,7 +205,7 @@ namespace rg
         // workaround for lamdas which pass their implicit this parameter
         // not needed if we have C++23 static lambdas
         template<typename... Args>
-        task_promise(auto&, ThreadPool* ptr, Args&... args) : task_promise(ptr, args...)
+        task_promise(auto&, Context& ctx, Args&... args) : task_promise(ctx, args...)
         {
         }
 
@@ -252,44 +255,6 @@ namespace rg
             requires(!std::is_void_v<U> && std::is_convertible_v<std::decay_t<U>, T>)
         {
             result = std::forward<U>(value);
-        }
-
-        // TODO contrain args to resource concept
-        // TODO PASS BY REF? also in init
-        // Called by children of this task
-        // TODO think abour using a concept
-        // TODO think about moving or passing by reference for awaiter
-        template<typename U, bool synchronous, bool finishedOnReturn>
-        auto& await_transform(DispatchAwaiter<U, synchronous, finishedOnReturn>& awaiter)
-        {
-            // Init
-            auto& awaiter_promise
-                = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
-
-            if constexpr(!finishedOnReturn)
-            {
-                awaiter_promise.parent = self;
-            }
-
-            // Init over
-
-            // TODO added to the resources, and now peopple will try to remove old stuff and run this.
-            // But I dont want to run this
-
-            // resources Ready based on reutrn value of register to resources or value of waitCounter
-
-            // if(resourcesReady)
-            //   return awaiter that suspends, adds continuation to stack, and executes task
-            // elseif resources not ready
-            //   task has been initialized with wait counter, waits for child notification to add to ready queue
-            //   return awaiter that suspend never (executes the continuation)
-            return awaiter;
-        }
-
-        template<typename NonDispatchAwaiter>
-        auto await_transform(NonDispatchAwaiter&& aw)
-        {
-            return std::forward<NonDispatchAwaiter>(aw);
         }
 
         static void* operator new(std::size_t n)
@@ -344,11 +309,13 @@ namespace rg
         // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly
         // dangle
         template<typename... Args>
-        task_promise(ThreadPool* ptr, Args&... args)
-            : pool_p{ptr}
+        task_promise(Context& ctx, Args&... args)
+            : pool_p{ctx.poolPtr}
+            , parent{ctx.handleRef}
             , self{SharedCoroutineHandle(std::coroutine_handle<task_promise>::from_promise(*this), sharedOwnerCounter)}
         {
             constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
+            ctx.handleRef = std::ref(self);
             resourceUsage.reserve(resource_counter);
             waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
             // Register task to resources
@@ -373,7 +340,7 @@ namespace rg
         // workaround for lamdas which pass their implicit this parameter
         // not needed if we have C++23 static lambdas
         template<typename... Args>
-        task_promise(auto&, ThreadPool* ptr, Args&... args) : task_promise(ptr, args...)
+        task_promise(auto&, Context& ctx, Args&... args) : task_promise(ctx, args...)
         {
         }
 
@@ -418,30 +385,6 @@ namespace rg
 
         void return_void() noexcept
         {
-        }
-
-        // TODO contrain args to resource concept
-        // TODO PASS BY REF? also in init
-        // Called by children of this task
-        // TODO think abour using a concept
-        // TODO think about moving or passing by reference for awaiter
-        template<typename U, bool synchronous, bool finishedOnReturn>
-        auto& await_transform(DispatchAwaiter<U, synchronous, finishedOnReturn>& awaiter)
-        {
-            auto& awaiter_promise
-                = awaiter.handle.coro.template promise<typename decltype(awaiter.handle)::promise_type>();
-
-            if constexpr(!finishedOnReturn)
-            {
-                awaiter_promise.parent = self;
-            }
-            return awaiter;
-        }
-
-        template<typename NonDispatchAwaiter>
-        auto await_transform(NonDispatchAwaiter&& aw)
-        {
-            return std::forward<NonDispatchAwaiter>(aw);
         }
 
         static void* operator new(std::size_t n)

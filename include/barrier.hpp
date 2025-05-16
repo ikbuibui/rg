@@ -6,7 +6,6 @@
 
 #include <coroutine>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 namespace rg
@@ -19,7 +18,7 @@ namespace rg
         { std::end(container) } -> std::input_iterator;
     };
 
-    template<IsResource... TArgs>
+    template<typename... TArgs>
     struct BarrierAwaiter
     {
         // TODO make sure holding references is fine
@@ -30,7 +29,7 @@ namespace rg
         // BarrierAwaiter(TArgs... res) : resArgs(std::move(res)...)
         // {
         // }
-        BarrierAwaiter(TArgs&... args) : resArgs(std::ref(args)...)
+        BarrierAwaiter(TArgs&... args) requires((IsResource<TArgs> && ... ) ) : resArgs(std::ref(args)...)
         {
         }
 
@@ -45,19 +44,19 @@ namespace rg
         std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> h) noexcept
         {
             auto& cont_promise = h.promise();
-            auto pool_ptr = cont_promise.pool_p;
+            auto ctx = Context(cont_promise.self, cont_promise.pool_p);
             // save here, as after dispatching continuation to the threadpool, this awaiter object (holding handle) may
             // be destroyed, then the return statement would be use after free
             auto handle = std::apply(
-                [pool_ptr, h](auto&... args)
+                [ctx, h](auto&... args)
                 {
                     // TODO move args in. Make rg write move res into resAccess
-                    return [](ThreadPool* pool_p, std::coroutine_handle<TPromise> h, auto...) -> Task<void>
+                    return [](Context ctx, std::coroutine_handle<TPromise> h, auto...) -> Task<void>
                     {
                         auto& cont_promise = h.promise();
-                        pool_p->addBarrier(cont_promise.self, cont_promise.coroOutsideTask);
+                        ctx.poolPtr->addBarrier(cont_promise.self, cont_promise.coroOutsideTask);
                         co_return;
-                    }(pool_ptr, h, args.get().rg_write()...);
+                    }(ctx, h, args.get().rg_write()...);
                 },
                 resArgs);
 
