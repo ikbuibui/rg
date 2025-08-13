@@ -10,7 +10,7 @@
 namespace rg
 {
     /**
-     * @brief DispatchAwaiter is a struct template that manages the suspension and resumption of coroutines.
+     * @brief DispatchAwaiter manages the start of the execution of coroutines.
      *
      * @tparam T The type of the coroutine handle.
      * @tparam Synchronous A boolean indicating if the continuation should striclty happen after the passed in handle

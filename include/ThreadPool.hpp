@@ -102,13 +102,6 @@ namespace rg
             thread_queue_p->emplace(h);
         }
 
-        // void addReadyTask(std::coroutine_handle<> h)
-        // {
-        //     // std::cout << "added ready task" << std::endl;
-        //     // readyQueue.bounded_push(h);
-        //     readyQueue.push(h);
-        // }
-
         // returns the return of the callable of the coroutine
         // void dispatch_task(std::coroutine_handle<> h)
         // {

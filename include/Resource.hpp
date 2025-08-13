@@ -36,6 +36,7 @@ namespace rg
     {
         T resource;
         // Unique identifier for the resource
+        // Dont really need this
         uint32_t resource_uid;
         mutable ResourceTaskQueue userQueue{};
 
@@ -102,24 +103,39 @@ namespace rg
         // {
         // }
 
-        ResNodeType const& getResNode() const
+        ResNodeType& getResNode() const
         {
             return *resNode;
         }
 
-        ResNodeType& getResNode()
-        {
-            return *resNode;
-        }
-
-        T& get()
+        T& get() &
         {
             return resNode->resource;
         }
 
-        T const& get() const
+        T const& get() const&
         {
             return resNode->resource;
+        }
+
+        T&& get() &&
+        {
+            return std::move(resNode->resource);
+        }
+
+        T const&& get() const&&
+        {
+            return std::move(resNode->resource);
+        }
+
+        bool unique() const
+        {
+            return resNode.unique();
+        }
+
+        long use_count() const
+        {
+            return resNode.use_count();
         }
     };
 

@@ -91,24 +91,34 @@ namespace rg
             return std::move(access);
         }
 
-        auto const& get() const
+        decltype(auto) get() const
         {
             return resource.get();
         }
 
-        auto& get()
+        decltype(auto) get()
         {
             return resource.get();
         }
 
-        auto const& operator*() const
+        decltype(auto) operator*() const
         {
             return get();
         }
 
-        auto& operator*()
+        decltype(auto) operator*()
         {
             return get();
+        }
+
+        decltype(auto) operator->() const
+        {
+            return std::addressof(get());
+        }
+
+        decltype(auto) operator->()
+        {
+            return std::addressof(get());
         }
 
         // using ResourceNodeType = typename TResource::ResNodeType;

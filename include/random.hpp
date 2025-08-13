@@ -13,7 +13,7 @@ namespace rg
         {
             if(state == 0)
             {
-                state = 0xdead'beef; // Ensure the state is non-zero
+                state = 0xdeaf'face; // Ensure the state is non-zero
             }
         }
 
