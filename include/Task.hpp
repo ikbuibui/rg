@@ -407,10 +407,23 @@ namespace rg
         { std::invoke_result_t<Callable, Args...>() } -> IsTask;
     };
 
-    template<bool synchronous = false, bool finishedOnReturn = false, typename... Args>
-    auto dispatch_task(auto&& task, Args&&... args) requires ReturnsTask<decltype(task), Args...>
+    // Helper lambda to transform each accessHandle
+    auto transform_resource(auto&& arg) -> decltype(auto)
     {
-        auto handle = std::invoke(std::forward<decltype(task)>(task), std::forward<Args>(args)...);
+        if constexpr(IsTransformResourceAccess<std::decay_t<decltype(arg)>>)
+        {
+            return arg();
+        }
+        else
+        {
+            return std::forward<decltype(arg)>(arg);
+        }
+    };
+
+    template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
+    auto dispatch_task(Callable&& task, Args&&... args) requires ReturnsTask<Callable, Args...>
+    {
+        auto handle = std::invoke(std::forward<Callable>(task), transform_resource(std::forward<Args>(args))...);
 
         return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle)};
     }

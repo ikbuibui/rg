@@ -84,6 +84,12 @@ namespace rg
         {
         }
 
+        template<typename U>
+        requires(!std::same_as<std::remove_cvref_t<U>, Resource>)
+        [[nodiscard]] explicit Resource(U&& value) : resNode(std::make_shared<ResNodeType>(std::forward<U>(value)))
+        {
+        }
+
         // Resource() : value(std::move(T{}))
         [[nodiscard]] Resource() requires std::default_initializable<T>
             : resNode(std::make_shared<ResNodeType>())

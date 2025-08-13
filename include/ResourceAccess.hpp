@@ -1,5 +1,6 @@
 #pragma once
 
+#include "resourceTransforms.hpp"
 #include "traits.hpp"
 
 #include <cassert>
@@ -134,6 +135,33 @@ namespace rg
         // }
     };
 
+    template<typename TResource, typename Transform>
+    class TransformResourceAccess : public ResourceAccess<TResource>
+    {
+    public:
+        // TODO make private
+        Transform transform{default_transformer};
+
+    public:
+        // get the memory of taskData from the resourceTaskQueue
+        TransformResourceAccess(TResource const& r, AccessMode accessMode, Transform t) noexcept
+            : ResourceAccess<TResource>(r, accessMode)
+            , transform(t)
+        {
+        }
+
+        TransformResourceAccess(TResource&& r, AccessMode accessMode, Transform t) noexcept
+            : ResourceAccess<TResource>(std::move(r), accessMode)
+            , transform(t)
+        {
+        }
+
+        auto operator()(auto&& arg) const -> decltype(auto)
+        {
+            return transform(std::forward<decltype(arg)>(arg));
+        }
+    };
+
     // mixing struct, TRes will inherit from IOAccess<TRes>,kind of CRTP style.
     template<typename TResource>
     struct IOAccess
@@ -151,10 +179,25 @@ namespace rg
         {
             return {*static_cast<TResource*>(this), AccessMode::Write};
         }
+
+        template<typename Transform>
+        TransformResourceAccess<TResource const, Transform> rg_read(Transform&& t) const
+        {
+            return {*static_cast<TResource const*>(this), AccessMode::Read, std::forward<Transform>(t)};
+        }
+
+        template<typename Transform>
+        TransformResourceAccess<TResource, Transform> rg_write(Transform&& t)
+        {
+            return {*static_cast<TResource*>(this), AccessMode::Write, std::forward<Transform>(t)};
+        }
     };
 
     template<typename T>
     concept IsResourceAccess = traits::is_specialization_of_v<std::remove_cvref_t<T>, ResourceAccess>;
 
+    template<typename T>
+    concept IsTransformResourceAccess
+        = traits::is_specialization_of_v<std::remove_cvref_t<T>, TransformResourceAccess>;
 
 } // namespace rg
