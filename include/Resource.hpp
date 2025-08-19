@@ -90,11 +90,9 @@ namespace rg
         {
         }
 
-        // Resource() : value(std::move(T{}))
         [[nodiscard]] Resource() requires std::default_initializable<T>
             : resNode(std::make_shared<ResNodeType>())
         {
-            // std::cout << "Default construct T" << std::endl;
         }
 
         // template<typename U>

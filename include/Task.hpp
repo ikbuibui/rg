@@ -194,7 +194,7 @@ namespace rg
                              &arg.resource.getResNode().userQueue,
                              arg.resource.getResNode().userQueue.add_task(
                                  {std::coroutine_handle<task_promise>::from_promise(*this),
-                                  std::move(arg.moveAccessMode()),
+                                  std::move(arg.getAccessMode()),
                                   &waitCounter,
                                   pool_p}));
                      }
@@ -329,7 +329,7 @@ namespace rg
                              &arg.resource.getResNode().userQueue,
                              arg.resource.getResNode().userQueue.add_task(
                                  {std::coroutine_handle<task_promise>::from_promise(*this),
-                                  std::move(arg.moveAccessMode()),
+                                  std::move(arg.getAccessMode()),
                                   &waitCounter,
                                   pool_p}));
                      }

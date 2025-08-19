@@ -87,9 +87,9 @@ namespace rg
             return resource.getResNode().getId();
         }
 
-        AccessMode&& moveAccessMode()
+        AccessMode getAccessMode()
         {
-            return std::move(access);
+            return access;
         }
 
         decltype(auto) get() const
