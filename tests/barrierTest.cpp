@@ -18,6 +18,7 @@ auto barrier_test_logic(rg::Context ctx) -> rg::InitTask<int>
     rg::Resource<DummyResourceData> resource1;
 
     auto handle = co_await rg::dispatch_task(
+        ctx.poolPtr,
         [](rg::Context, auto) -> rg::Task<int>
         {
             std::cout << "going to sleep" << std::endl;
@@ -33,6 +34,7 @@ auto barrier_test_logic(rg::Context ctx) -> rg::InitTask<int>
     std::cout << "after barrier" << std::endl;
     std::cout << "output value " << co_await handle.get() << std::endl;
     co_await rg::dispatch_task(
+        ctx.poolPtr,
         [](rg::Context, auto res_access) -> rg::Task<void>
         {
             std::cout << "second access to resource" << std::endl;

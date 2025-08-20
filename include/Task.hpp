@@ -62,7 +62,7 @@ namespace rg
     struct task_promise;
 
     template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
-    auto dispatch_task(Callable&& task, Context const& ctx, Args... args);
+    auto dispatch_task(ThreadPool* pool_p, Callable&& task, Context ctx, Args&&... args);
 
     // parser coroutine return type
     // returns the value of the callable
@@ -83,7 +83,7 @@ namespace rg
         friend struct BarrierAwaiter;
 
         template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
-        friend auto dispatch_task(Callable&& task, Context const& ctx, Args... args);
+        friend auto dispatch_task(ThreadPool* pool_p, Callable&& task, Context ctx, Args&&... args);
 
         using promise_type = task_promise<T>;
 
@@ -388,9 +388,10 @@ namespace rg
 
     // TODO add requires ReturnsTask<Callable, Args...>
     template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
-    auto dispatch_task(Callable&& task, Context const& ctx, Args... args)
+    auto dispatch_task(ThreadPool* pool_p, Callable&& task, Context ctx, Args&&... args)
     {
-        auto handle = std::invoke(std::forward<Callable>(task), ctx, transform_resource(args)...);
+        ctx.poolPtr = pool_p;
+        auto handle = std::invoke(std::forward<Callable>(task), std::move(ctx), transform_resource(args)...);
 
         // register to the resources
         // if it is a transform resource, call transform on it
@@ -405,7 +406,7 @@ namespace rg
         // Fold expression only for handles satisfying HasAccessType
         (...,
          (
-             [&resourceUsage, &ctx, &waitCounter, &handle](auto& arg)
+             [&](auto& arg)
              {
                  if constexpr(IsResourceAccess<decltype(arg)>)
                  {
@@ -413,7 +414,7 @@ namespace rg
                          &arg.resource.getResNode().userQueue,
                          arg.resource.getResNode().userQueue.add_task(
                              {handle.coro.template get_coroutine_handle<typename decltype(handle)::promise_type>(),
-                              std::move(arg.getAccessMode()),
+                              arg.getAccessMode(),
                               &waitCounter,
                               ctx.poolPtr}));
                  }

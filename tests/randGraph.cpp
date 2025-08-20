@@ -104,6 +104,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 0:
             {
                 co_await rg::dispatch_task<false, false>(
+                    ctx.poolPtr,
                     []([[maybe_unused]] rg::Context ctx) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -115,6 +116,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 1:
             {
                 co_await rg::dispatch_task<false, false>(
+                    ctx.poolPtr,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -129,6 +131,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 2:
             {
                 co_await rg::dispatch_task<false, false>(
+                    ctx.poolPtr,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -145,6 +148,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 3:
             {
                 co_await rg::dispatch_task<false, false>(
+                    ctx.poolPtr,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, auto ra3, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -163,6 +167,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 4:
             {
                 co_await rg::dispatch_task<false, false>(
+                    ctx.poolPtr,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, auto ra3, auto ra4, unsigned i)
                         -> rg::Task<void>
                     {
@@ -184,6 +189,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 5:
             {
                 co_await rg::dispatch_task<false, false>(
+                    ctx.poolPtr,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, auto ra3, auto ra4, auto ra5, unsigned i)
                         -> rg::Task<void>
                     {
@@ -238,7 +244,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
             co_return 0;
         };
 
-        co_await rg::dispatch_task(f, ctx, resources[i].rg_read(), i);
+        co_await rg::dispatch_task(ctx.poolPtr, f, ctx, resources[i].rg_read(), i);
     }
     co_return 0;
 }
