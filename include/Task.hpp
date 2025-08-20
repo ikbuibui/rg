@@ -61,6 +61,9 @@ namespace rg
     template<typename T>
     struct task_promise;
 
+    template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
+    auto dispatch_task(Callable&& task, Context const& ctx, Args... args);
+
     // parser coroutine return type
     // returns the value of the callable
     // I want to suspend_always initial_suspend it and then put its handle to the handle stack
@@ -78,6 +81,9 @@ namespace rg
 
         template<typename... TArgs>
         friend struct BarrierAwaiter;
+
+        template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
+        friend auto dispatch_task(Callable&& task, Context const& ctx, Args... args);
 
         using promise_type = task_promise<T>;
 
@@ -173,32 +179,12 @@ namespace rg
         // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly
         // dangle
         template<typename... Args>
-        task_promise(Context& ctx, Args&... args)
+        task_promise(Context& ctx, Args&...)
             : pool_p{ctx.poolPtr}
             , parent{ctx.handleRef}
             , self{SharedCoroutineHandle(std::coroutine_handle<task_promise>::from_promise(*this), sharedOwnerCounter)}
         {
-            constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
             ctx.handleRef = std::ref(self);
-            resourceUsage.reserve(resource_counter);
-            waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
-            // Register task to resources
-            // Fold expression only for handles satisfying HasAccessType
-            (...,
-             (
-                 [this](auto& arg)
-                 {
-                     if constexpr(IsResourceAccess<decltype(arg)>)
-                     {
-                         resourceUsage.emplace_back(
-                             &arg.resource.getResNode().userQueue,
-                             arg.resource.getResNode().userQueue.add_task(
-                                 {std::coroutine_handle<task_promise>::from_promise(*this),
-                                  std::move(arg.getAccessMode()),
-                                  &waitCounter,
-                                  pool_p}));
-                     }
-                 }(args)));
         }
 
         // workaround for lamdas which pass their implicit this parameter
@@ -308,32 +294,12 @@ namespace rg
         // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly
         // dangle
         template<typename... Args>
-        task_promise(Context& ctx, Args&... args)
+        task_promise(Context& ctx, Args&...)
             : pool_p{ctx.poolPtr}
             , parent{ctx.handleRef}
             , self{SharedCoroutineHandle(std::coroutine_handle<task_promise>::from_promise(*this), sharedOwnerCounter)}
         {
-            constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
             ctx.handleRef = std::ref(self);
-            resourceUsage.reserve(resource_counter);
-            waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
-            // Register task to resources
-            // Fold expression only for handles satisfying HasAccessType
-            (...,
-             (
-                 [this](auto& arg)
-                 {
-                     if constexpr(IsResourceAccess<decltype(arg)>)
-                     {
-                         resourceUsage.emplace_back(
-                             &arg.resource.getResNode().userQueue,
-                             arg.resource.getResNode().userQueue.add_task(
-                                 {std::coroutine_handle<task_promise>::from_promise(*this),
-                                  std::move(arg.getAccessMode()),
-                                  &waitCounter,
-                                  pool_p}));
-                     }
-                 }(args)));
         }
 
         // workaround for lamdas which pass their implicit this parameter
@@ -420,10 +386,38 @@ namespace rg
         }
     };
 
-    template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
-    auto dispatch_task(Callable&& task, Args&&... args) requires ReturnsTask<Callable, Args...>
+    // TODO add requires ReturnsTask<Callable, Args...>
+    template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
+    auto dispatch_task(Callable&& task, Context const& ctx, Args... args)
     {
-        auto handle = std::invoke(std::forward<Callable>(task), transform_resource(std::forward<Args>(args))...);
+        auto handle = std::invoke(std::forward<Callable>(task), ctx, transform_resource(args)...);
+
+        // register to the resources
+        // if it is a transform resource, call transform on it
+        constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
+        auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
+        auto& resourceUsage = handlePromise.resourceUsage;
+        auto& waitCounter = handlePromise.waitCounter;
+
+        resourceUsage.reserve(resource_counter);
+        waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
+        // Register task to resources
+        // Fold expression only for handles satisfying HasAccessType
+        (...,
+         (
+             [&resourceUsage, &ctx, &waitCounter, &handle](auto& arg)
+             {
+                 if constexpr(IsResourceAccess<decltype(arg)>)
+                 {
+                     resourceUsage.emplace_back(
+                         &arg.resource.getResNode().userQueue,
+                         arg.resource.getResNode().userQueue.add_task(
+                             {handle.coro.template get_coroutine_handle<typename decltype(handle)::promise_type>(),
+                              std::move(arg.getAccessMode()),
+                              &waitCounter,
+                              ctx.poolPtr}));
+                 }
+             }(args)));
 
         return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle)};
     }
