@@ -26,35 +26,41 @@ namespace rg
     template<typename AwaitedPromise>
     struct GetAwaiter
     {
-        // std::coroutine_handle<AwaitedPromise> coro;
-
         SharedCoroutineHandle coro;
 
         bool await_ready() const noexcept
         {
-            // if it is 0, task is done, continue, if 1, then pause task
-            return !coro.promise<AwaitedPromise>().workingState;
+            // The task is ready without suspending if its working state is 0 (done), else suspend.
+            return coro.promise<AwaitedPromise>().workingState.load(std::memory_order_acquire) == 0;
         }
 
         // has a lock to prevent final suspend of coro being done when await suspend is being called
         template<typename ContPromise>
-        constexpr bool await_suspend(std::coroutine_handle<ContPromise> h) const noexcept
+        bool await_suspend(std::coroutine_handle<ContPromise> h) noexcept
         {
             // If coro not done, add h to its waiter handle and it will be done in final suspend
-            // if coro is done, we can simply resume h
-            coro.promise<AwaitedPromise>().continuationHandle = h;
+            auto& promise = coro.promise<AwaitedPromise>();
+            // if coro is done, we can simply resume h on final suspend
+            promise.continuationHandle = h;
+
+            // Atomically transition from 'running' (1) to 'continuation attached' (2).
+            // If the task finished concurrently (state became 0), the CAS will fail.
             uint32_t expectedState = 1;
-            coro.promise<AwaitedPromise>().workingState.compare_exchange_strong(expectedState, 2);
-            // return true to suspend if expected state is 1
-            return expectedState != 0;
+            // Suspend the caller if state was changed, else task was already completed and we dont suspend.
+            return promise.workingState.compare_exchange_strong(expectedState, 2, std::memory_order_acq_rel);
         }
 
         // will only be called after the task is done
         auto await_resume() const noexcept
         {
-            auto result = std::move(coro.promise<AwaitedPromise>().result);
-            coro.promise<AwaitedPromise>().coroOutsideTask = false;
-            return result;
+            auto& promise = coro.promise<AwaitedPromise>();
+            promise.coroOutsideTask = false;
+
+            // Return the result for non-void tasks.
+            if constexpr(!std::is_void_v<typename AwaitedPromise::return_type>)
+            {
+                return std::move(promise.result);
+            }
         }
     };
 
@@ -119,9 +125,7 @@ namespace rg
             }
         }
 
-        // TODO put some of the on get destruction logic in destructor as well. If destroying the object without
-        // calling get,
-        auto get() -> GetAwaiter<promise_type> requires(!std::is_void_v<T>)
+        auto get() -> GetAwaiter<promise_type>
         {
             // moved coro, calling get again is an error
             auto awaiter = GetAwaiter<promise_type>{std::move(coro)};
