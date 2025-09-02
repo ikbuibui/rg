@@ -104,26 +104,24 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 0:
             {
                 co_await rg::dispatch_task<false, false>(
-                    ctx.poolPtr,
+                    ctx,
                     []([[maybe_unused]] rg::Context ctx) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         co_return;
-                    },
-                    ctx);
+                    });
                 break;
             }
         case 1:
             {
                 co_await rg::dispatch_task<false, false>(
-                    ctx.poolPtr,
+                    ctx,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
                         hash(i, *ra1);
                         co_return;
                     },
-                    ctx,
                     resources[access_pattern[i][0]].rg_write(),
                     i);
                 break;
@@ -131,7 +129,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 2:
             {
                 co_await rg::dispatch_task<false, false>(
-                    ctx.poolPtr,
+                    ctx,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -139,7 +137,6 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
                         hash(i, *ra2);
                         co_return;
                     },
-                    ctx,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     i);
@@ -148,7 +145,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 3:
             {
                 co_await rg::dispatch_task<false, false>(
-                    ctx.poolPtr,
+                    ctx,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, auto ra3, unsigned i) -> rg::Task<void>
                     {
                         sleep(task_duration);
@@ -157,7 +154,6 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
                         hash(i, *ra3);
                         co_return;
                     },
-                    ctx,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     resources[access_pattern[i][2]].rg_write(),
@@ -167,7 +163,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 4:
             {
                 co_await rg::dispatch_task<false, false>(
-                    ctx.poolPtr,
+                    ctx,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, auto ra3, auto ra4, unsigned i)
                         -> rg::Task<void>
                     {
@@ -178,7 +174,6 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
                         hash(i, *ra4);
                         co_return;
                     },
-                    ctx,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     resources[access_pattern[i][2]].rg_write(),
@@ -189,7 +184,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
         case 5:
             {
                 co_await rg::dispatch_task<false, false>(
-                    ctx.poolPtr,
+                    ctx,
                     []([[maybe_unused]] rg::Context ctx, auto ra1, auto ra2, auto ra3, auto ra4, auto ra5, unsigned i)
                         -> rg::Task<void>
                     {
@@ -201,7 +196,6 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
                         hash(i, *ra5);
                         co_return;
                     },
-                    ctx,
                     resources[access_pattern[i][0]].rg_write(),
                     resources[access_pattern[i][1]].rg_write(),
                     resources[access_pattern[i][2]].rg_write(),
@@ -244,7 +238,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
             co_return 0;
         };
 
-        co_await rg::dispatch_task(ctx.poolPtr, f, ctx, resources[i].rg_read(), i);
+        co_await rg::dispatch_task(ctx, f, resources[i].rg_read(), i);
     }
     co_return 0;
 }

@@ -53,7 +53,7 @@ auto nqueens(rg::Context ctx, int xMax, std::array<char, N> buf) -> rg::Task<int
     std::array<rg::Task<int>, N> parts;
     for([[maybe_unused]] auto t : tasks)
     {
-        parts[taskCount] = co_await rg::dispatch_task(ctx.poolPtr, nqueens<N>, ctx, xMax + 1, buf);
+        parts[taskCount] = co_await rg::dispatch_task(ctx, nqueens<N>, xMax + 1, buf);
         ++taskCount;
     }
 
@@ -71,7 +71,7 @@ auto main_wrapper(rg::Context ctx) -> rg::InitTask<int>
     {
         std::array<char, nqueens_work> buf{};
         // warmup
-        auto result = co_await dispatch_task(ctx.poolPtr, nqueens<nqueens_work>, ctx, 0, buf);
+        auto result = co_await dispatch_task(ctx, nqueens<nqueens_work>, 0, buf);
         check_answer(co_await result.get());
         co_await rg::barrier();
     }
@@ -81,7 +81,7 @@ auto main_wrapper(rg::Context ctx) -> rg::InitTask<int>
     for(size_t i = 0; i < iter_count; ++i)
     {
         std::array<char, nqueens_work> buf{};
-        auto result = co_await dispatch_task(ctx.poolPtr, nqueens<nqueens_work>, ctx, 0, buf);
+        auto result = co_await dispatch_task(ctx, nqueens<nqueens_work>, 0, buf);
         auto res = co_await result.get();
         check_answer(res);
         std::printf("  - %d\n", res);

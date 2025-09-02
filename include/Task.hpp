@@ -68,7 +68,7 @@ namespace rg
     struct task_promise;
 
     template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
-    auto dispatch_task(ThreadPool* pool_p, Callable&& task, Context ctx, Args&&... args);
+    auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args);
 
     // parser coroutine return type
     // returns the value of the callable
@@ -89,7 +89,7 @@ namespace rg
         friend struct BarrierAwaiter;
 
         template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
-        friend auto dispatch_task(ThreadPool* pool_p, Callable&& task, Context ctx, Args&&... args);
+        friend auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args);
 
         using promise_type = task_promise<T>;
 
@@ -392,7 +392,7 @@ namespace rg
 
     // TODO add requires ReturnsTask<Callable, Args...>
     template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
-    auto dispatch_task(ThreadPool* pool_p, Callable&& task, Context ctx, Args&&... args)
+    auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args)
     {
         ctx.poolPtr = pool_p;
         auto handle = std::invoke(std::forward<Callable>(task), std::move(ctx), transform_resource(args)...);
@@ -425,6 +425,16 @@ namespace rg
              }(args)));
 
         return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle)};
+    }
+
+    template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
+    auto dispatch_task(Context ctx, Callable&& task, Args&&... args)
+    {
+        return dispatch_task<synchronous, finishedOnReturn>(
+            ctx.poolPtr,
+            ctx,
+            std::forward<Callable>(task),
+            std::forward<Args>(args)...);
     }
 
 } // namespace rg

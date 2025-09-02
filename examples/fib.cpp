@@ -14,21 +14,21 @@ inline auto fib(rg::Context ctx, size_t n) -> rg::Task<size_t>
         co_return n;
     }
 
-    auto a = co_await rg::dispatch_task<false, true>(ctx.poolPtr, fib, ctx, n - 1);
-    auto b = co_await rg::dispatch_task<true, true>(ctx.poolPtr, fib, ctx, n - 2);
+    auto a = co_await rg::dispatch_task<false, true>(ctx, fib, n - 1);
+    auto b = co_await rg::dispatch_task<true, true>(ctx, fib, n - 2);
     co_return co_await a.get() + b;
 };
 
 auto main_wrapper(rg::Context ctx, size_t n) -> rg::InitTask<int>
 {
-    co_await rg::dispatch_task(ctx.poolPtr, fib, ctx, 30);
+    co_await rg::dispatch_task(ctx, fib, 30);
     co_await rg::barrier();
     std::printf("results:\n");
     auto startTime = std::chrono::high_resolution_clock::now();
 
     for(size_t i = 0; i < iter_count; ++i)
     {
-        auto result = co_await rg::dispatch_task(ctx.poolPtr, fib, ctx, n);
+        auto result = co_await rg::dispatch_task(ctx, fib, n);
         std::printf("  - %" PRIu64 "\n", co_await result.get());
     }
 

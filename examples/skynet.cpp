@@ -27,12 +27,7 @@ rg::Task<size_t> skynet_one(rg::Context ctx, size_t BaseNum, size_t Depth)
     std::array<rg::Task<size_t>, 10> children;
     for(size_t idx = 0; idx < 10; ++idx)
     {
-        children[idx] = co_await rg::dispatch_task(
-            ctx.poolPtr,
-            skynet_one<DepthMax>,
-            ctx,
-            BaseNum + depthOffset * idx,
-            Depth + 1);
+        children[idx] = co_await rg::dispatch_task(ctx, skynet_one<DepthMax>, BaseNum + depthOffset * idx, Depth + 1);
     }
 
     size_t count = 0;
@@ -46,7 +41,7 @@ rg::Task<size_t> skynet_one(rg::Context ctx, size_t BaseNum, size_t Depth)
 template<size_t DepthMax>
 rg::Task<void> skynet(rg::Context ctx)
 {
-    auto handle = co_await rg::dispatch_task(ctx.poolPtr, skynet_one<DepthMax>, ctx, 0, 0);
+    auto handle = co_await rg::dispatch_task(ctx, skynet_one<DepthMax>, 0, 0);
     size_t count = co_await handle.get();
     if(count != 4'999'999'950'000'000)
     {
@@ -62,7 +57,7 @@ rg::Task<void> loop_skynet(rg::Context ctx)
     auto startTime = std::chrono::high_resolution_clock::now();
     for(size_t j = 0; j < iter_count; ++j)
     {
-        co_await rg::dispatch_task(ctx.poolPtr, skynet<Depth>, ctx);
+        co_await rg::dispatch_task(ctx, skynet<Depth>);
         co_await rg::barrier();
     }
 
@@ -74,9 +69,9 @@ rg::Task<void> loop_skynet(rg::Context ctx)
 
 auto main_wrapper(rg::Context ctx) -> rg::InitTask<int>
 {
-    co_await rg::dispatch_task(ctx.poolPtr, skynet<8>, ctx); // warmup
+    co_await rg::dispatch_task(ctx, skynet<8>); // warmup
     co_await rg::barrier();
-    co_await rg::dispatch_task(ctx.poolPtr, loop_skynet<8>, ctx);
+    co_await rg::dispatch_task(ctx, loop_skynet<8>);
     co_return 0;
 }
 
