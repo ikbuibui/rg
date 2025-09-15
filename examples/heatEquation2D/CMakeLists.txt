@@ -49,13 +49,15 @@ endif()
 #-------------------------------------------------------------------------------
 # Add executable.
 
-alpaka_add_executable(
+add_executable(
     ${_TARGET_NAME}
     src/heatEquation2D.cpp)
 
 target_link_libraries(
     ${_TARGET_NAME}
     PRIVATE alpaka::alpaka)
+
+alpaka_finalize(${_TARGET_NAME})
 
 if(PNGwriter_FOUND)
     target_link_libraries(

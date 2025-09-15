@@ -1,5 +1,5 @@
 /* Copyright 2020 Benjamin Worpitz, Matthias Werner, Jakob Krude, Sergei Bastrakov, Bernhard Manfred Gruber,
- * Tapish Narwal
+ * Tapish Narwal, Anton Reinhard
  * SPDX-License-Identifier: ISC
  */
 
@@ -12,8 +12,9 @@
 #endif
 
 #include <alpaka/alpaka.hpp>
-#include <alpaka/example/executeForEach.hpp>
-#include <alpaka/example/executors.hpp>
+#include <alpaka/onHost/FrameSpec.hpp>
+#include <alpaka/onHost/example/executors.hpp>
+#include <alpaka/onHost/executeForEach.hpp>
 #include <rg.hpp>
 
 #include <algorithm>
@@ -24,8 +25,28 @@
 #include <iostream>
 #include <utility>
 
+using namespace alpaka;
+
+using IdxType = uint32_t;
+using Data = double;
+
+void printExampleHeader(IdxType const sideLength, IdxType const numTimeSteps, bool const autoCheck, double const tMax)
+{
+    std::cout << "================================" << std::endl;
+    std::cout << "Example Heat Equation Stencil" << std::endl;
+    std::cout << "    Number of elements [#]: " << sideLength << " x " << sideLength << " = "
+              << sideLength * sideLength << std::endl;
+    std::cout << "    Time steps [#]: " << numTimeSteps << std::endl;
+    std::cout << "    tMax: " << tMax << std::endl;
+    std::cout << "    Element type: " << onHost::demangledName<Data>() << std::endl;
+    std::cout << "    Buffer size [kbyte]: " << sideLength * sideLength * sizeof(Data) / 1.e3 << std::endl;
+    std::cout << "    Result checking is " << (autoCheck ? "enabled" : "disabled") << std::endl;
+    std::cout << "================================" << std::endl;
+    std::cout << std::endl;
+}
+
 //! Each kernel computes the next step for one point.
-//! Therefore the number of threads should be equal to numNodesX.
+//! Therefore, the number of threads should be equal to numNodesX.
 //! Every time step the kernel will be executed numNodesX-times
 //! After every step the curr-buffer will be set to the calculated values
 //! from the next-buffer.
@@ -34,45 +55,56 @@
 //! Instead, a single accelerator is selected once from the active accelerators and the kernels are executed with the
 //! selected accelerator only. If you use the example as the starting point for your project, you can rename the
 //! example() function to main() and move the accelerator tag to the function body.
-template<typename T_Cfg>
-auto example(rg::Context ctx, T_Cfg const& cfg) -> rg::InitTask<int>
+auto example(
+    rg::Context ctx,
+    auto const deviceSpec,
+    auto const computeExec,
+    uint32_t const sideLength,
+    uint32_t const numTimeSteps,
+    double const tMax,
+    bool const enableCheck) -> rg::InitTask<int>
 {
     using namespace alpaka;
     using namespace alpaka::onHost;
 
-    using Idx = uint32_t;
-    using IdxVec = alpaka::Vec<Idx, 2u>;
+    constexpr uint32_t Dimensions = 2u;
+    using IdxTypeVec = Vec<IdxType, Dimensions>;
 
-    auto api = cfg[object::api];
-    auto exec = cfg[object::exec];
+    std::cout << deviceSpec.getApi().getName() << std::endl;
 
-    std::cout << api.getName() << std::endl;
+    auto devSelector = makeDeviceSelector(deviceSpec);
+    Device devAcc = devSelector.makeDevice(0);
 
-    std::cout << "Using alpaka accelerator: " << core::demangledName(exec) << " for " << api.getName() << std::endl;
-
-    // Select specific devices
-    Platform platformHost = makePlatform(api::cpu);
-    Device devHost = platformHost.makeDevice(0);
-
-    Platform platformAcc = makePlatform(api);
-    Device devAcc = platformAcc.makeDevice(0);
+#if ALPAKA_LANG_ONEAPI
+    // support for double precision is not guaranteed for sycl devices such as Intel GPUs
+    if constexpr(deviceSpec.getApi() == api::oneApi && std::is_same_v<Data, double>)
+    {
+        if(devAcc.getNativeHandle().first.template get_info<sycl::info::device::double_fp_config>().size() == 0)
+        {
+            std::cout << getName(devAcc) << " does not support double precision"
+                      << "\n";
+            std::cout << "Skip benchmark.\n";
+            std::cout << "For Intel Arc GPUs, use the environment variables `IGC_EnableDPEmulation=1 "
+                         "OverrideDefaultFP64Settings=1` to emulate double precision support.\n";
+            // return 0 otherwise ctest fails
+            return EXIT_SUCCESS;
+        }
+    }
+#endif
 
     // simulation defines
     // {Y, X}
-    constexpr IdxVec numNodes{64, 64};
-    constexpr IdxVec haloSize{2, 2};
-    constexpr IdxVec extent = numNodes + haloSize;
-
-    constexpr uint32_t numTimeSteps = 4000;
-    constexpr double tMax = 0.1;
+    IdxTypeVec const numNodes{sideLength, sideLength};
+    IdxTypeVec const haloSize{1, 1};
+    IdxTypeVec const extent = numNodes + haloSize + haloSize;
 
     // x, y in [0, 1], t in [0, tMax]
-    constexpr double dx = 1.0 / static_cast<double>(extent[1] - 1);
-    constexpr double dy = 1.0 / static_cast<double>(extent[0] - 1);
-    constexpr double dt = tMax / static_cast<double>(numTimeSteps);
+    Data const dx = 1.0 / static_cast<Data>(extent[1] - 1);
+    Data const dy = 1.0 / static_cast<Data>(extent[0] - 1);
+    Data const dt = tMax / static_cast<Data>(numTimeSteps);
 
     // Check the stability condition
-    double r = 2 * dt / ((dx * dx * dy * dy) / (dx * dx + dy * dy));
+    Data const r = 2 * dt / ((dx * dx * dy * dy) / (dx * dx + dy * dy));
     if(r > 1.)
     {
         std::cerr << "Stability condition check failed: dt/min(dx^2,dy^2) = " << r
@@ -82,39 +114,33 @@ auto example(rg::Context ctx, T_Cfg const& cfg) -> rg::InitTask<int>
 
     // Initialize host-buffer
     // This buffer will hold the current values (used for the next step)
-    auto uBufHost = rg::Resource(alpaka::onHost::alloc<double>(devHost, extent));
+    auto uBufHost = rg::Resource(allocHost<Data>(extent));
 
     // Accelerator buffer
-    auto uCurrBufAcc = rg::Resource(alpaka::onHost::allocMirror(devAcc, uBufHost.get()));
-    auto uNextBufAcc = rg::Resource(alpaka::onHost::allocMirror(devAcc, uBufHost.get()));
+    auto uCurrBufAcc = rg::Resource(allocLike(devAcc, *uBufHost));
+    auto uNextBufAcc = rg::Resource(allocLike(devAcc, *uBufHost));
 
     // Set buffer to initial conditions
-    initalizeBuffer(uBufHost.get().getMdSpan(), dx, dy);
+    initalizeBuffer(uBufHost->getMdSpan(), dx, dy);
 
     // Select queue
     Queue dumpQueue = devAcc.makeQueue();
     Queue computeQueue = devAcc.makeQueue();
 
     // Copy host -> device
-    co_await rg::dispatch_task(
-        [](auto computeQueue, auto uCurrBufAcc, auto uBufHost) -> rg::Task<void>
-        { alpaka::onHost::memcpy(computeQueue, uCurrBufAcc, uBufHost); },ctx,
-        computeQueue,
-        uCurrBufAcc.rg_write(),
-        uBufHost.rg_read());
-
-    alpaka::onHost::wait(computeQueue);
+    memcpy(computeQueue, *uCurrBufAcc, *uBufHost);
+    wait(computeQueue);
 
     // Appropriate chunk size to split your problem for your Acc
-    constexpr Idx xSize = 16u;
-    constexpr Idx ySize = 16u;
-    constexpr Idx halo = 2u;
-    constexpr auto chunkSize = CVec<Idx, ySize, xSize>{};
-    constexpr auto numNodesWithHalo = numNodes + halo;
+    constexpr IdxType xSize = 16u;
+    constexpr IdxType ySize = 16u;
+    constexpr IdxType halo = 2u;
+    constexpr auto chunkSize = CVec<IdxType, ySize, xSize>{};
+    auto const numNodesWithHalo = numNodes + halo;
 
-    constexpr IdxVec numChunks{
-        alpaka::divCeil(numNodes[0], chunkSize[0]),
-        alpaka::divCeil(numNodes[1], chunkSize[1]),
+    IdxTypeVec const numChunks{
+        divCeil(numNodes[0], chunkSize[0]),
+        divCeil(numNodes[1], chunkSize[1]),
     };
 
     assert(
@@ -122,28 +148,29 @@ auto example(rg::Context ctx, T_Cfg const& cfg) -> rg::InitTask<int>
         && "Domain must be divisible by chunk size");
 
     auto sharedMemExtents = CVec<uint32_t, ySize + halo, xSize + halo>{};
+
     StencilKernel stencilKernel;
     BoundaryKernel boundaryKernel;
 
-    auto dataBlockingStencil = FrameSpec{numChunks, chunkSize};
+    auto const dataBlockingStencil = FrameSpec{numChunks, chunkSize};
 
-    constexpr auto longestSide = std::max(numNodesWithHalo.y(), numNodesWithHalo.x());
-    auto dataBlockingBorder = FrameSpec{Vec{longestSide / chunkSize.x()}, Vec{std::max(chunkSize.y(), chunkSize.x())}};
+    auto const longestSide = std::max(numNodesWithHalo.y(), numNodesWithHalo.x());
+    auto const dataBlockingBorder
+        = FrameSpec{Vec{longestSide / chunkSize.x()}, Vec{std::max(chunkSize.y(), chunkSize.x())}};
 
-    auto startTime = std::chrono::high_resolution_clock::now();
+    auto const startTime = std::chrono::high_resolution_clock::now();
 
     // Simulate
     for(uint32_t step = 1; step <= numTimeSteps; ++step)
     {
         // Compute next values
-        alpaka::onHost::enqueue(
-            computeQueue,
-            exec,
+        computeQueue.enqueue(
+            computeExec,
             dataBlockingStencil,
             KernelBundle{
                 stencilKernel,
-                uCurrBufAcc.getMdSpan(),
-                uNextBufAcc.getMdSpan(),
+                *uCurrBufAcc,
+                *uNextBufAcc,
                 chunkSize,
                 sharedMemExtents,
                 numNodes,
@@ -151,40 +178,42 @@ auto example(rg::Context ctx, T_Cfg const& cfg) -> rg::InitTask<int>
                 dy,
                 dt});
 
-        // Apply boundaries
-        alpaka::onHost::enqueue(
-            computeQueue,
-            exec,
+        computeQueue.enqueue(
+            computeExec,
             dataBlockingBorder,
-            KernelBundle{boundaryKernel, uNextBufAcc.getMdSpan(), numNodesWithHalo, step, dx, dy, dt});
+            KernelBundle{boundaryKernel, uNextBufAcc->getMdSpan(), numNodesWithHalo, step, dx, dy, dt});
 
 #ifdef PNGWRITER_ENABLED
         if((step - 1) % 100 == 0)
         {
-            alpaka::onHost::wait(computeQueue);
-            alpaka::onHost::memcpy(dumpQueue, uBufHost, uCurrBufAcc);
-            alpaka::onHost::wait(dumpQueue);
-            writeImage(step - 1, uBufHost.getMdSpan());
+            wait(computeQueue);
+            memcpy(dumpQueue, *uBufHost, *uCurrBufAcc);
+            wait(dumpQueue);
+            writeImage(step - 1, uBufHost->getMdSpan());
         }
 #endif
 
         // So we just swap next and curr (shallow copy)
-        std::swap(uNextBufAcc, uCurrBufAcc);
+        std::swap(*uNextBufAcc, *uCurrBufAcc);
     }
 
-    alpaka::onHost::wait(computeQueue);
-    auto endTime = std::chrono::high_resolution_clock::now();
+    wait(computeQueue);
+    auto const endTime = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
 
     std::cout << "Simulation took " << elapsedTime.count() << " seconds." << std::endl;
+    std::cout << "Time per time step: " << elapsedTime.count() / numTimeSteps * 1000 << " ms." << std::endl;
 
 
     // Copy device -> host
-    alpaka::onHost::memcpy(dumpQueue, uBufHost, uCurrBufAcc);
-    alpaka::onHost::wait(dumpQueue);
+    memcpy(dumpQueue, *uBufHost, *uCurrBufAcc);
+    wait(dumpQueue);
 
     // Validate
-    auto const [resultIsCorrect, maxError] = validateSolution(uBufHost.getMdSpan(), extent, dx, dy, tMax);
+    if(!enableCheck)
+        co_return EXIT_SUCCESS;
+
+    auto const [resultIsCorrect, maxError] = validateSolution(uBufHost->getMdSpan(), extent, dx, dy, tMax);
 
     if(resultIsCorrect)
     {
@@ -199,25 +228,111 @@ auto example(rg::Context ctx, T_Cfg const& cfg) -> rg::InitTask<int>
     }
 }
 
-auto main() -> int
+void help(char* argv[])
+{
+    std::cerr << argv[0] << " [OPTIONS]" << std::endl;
+    std::cerr << "  -n sideLength: Number of elements per side of the 2D plane. Default: 2^6 = 64" << std::endl;
+    std::cerr << "  -t numTimeSteps: Number of time steps that the simulation is run for. Default: 4000" << std::endl;
+    std::cerr << "  -d tMax: Delta t for the timesteps, has to be smaller for larger sideLengths to pass the "
+                 "stability condition. Default: 0.1"
+              << std::endl;
+    std::cerr << "  -c: disable checking for correct results" << std::endl;
+    std::cerr << "  -h: Print this help message" << std::endl;
+    std::cerr << std::endl;
+}
+
+auto main(int argc, char* argv[]) -> int
 {
     using namespace alpaka;
 
     constexpr auto num_threads = 6u;
     auto poolObj = rg::init(num_threads);
 
-    // Execute the example once for each enabled accelerator.
-    // If you would like to execute it for a single accelerator only you can use the following code.
-    //  \code{.cpp}
-    //  auto tag = TagCpuSerial;
-    //  return example(tag);
-    //  \endcode
-    //
-    // valid tags:
-    //   TagCpuSerial, TagGpuHipRt, TagGpuCudaRt, TagCpuOmp2Blocks, TagCpuTbbBlocks,
-    //   TagCpuOmp2Threads, TagCpuSycl, TagCpuTbbBlocks, TagCpuThreads,
-    //   TagFpgaSyclIntel, TagGenericSycl, TagGpuSyclIntel
-    return executeForEach(
-        [&](auto const& tag) { return example(poolObj.pool_ptr(), tag).get(); },
-        onHost::allExecutorsAndApis(onHost::enabledApis));
+    // Default value if no command line argument used
+    IdxType sideLength = 1 << 6;
+    IdxType numTimeSteps = 4000;
+
+    int opt;
+    bool enableCheck = true;
+    double tMax = 0.1;
+
+    while((opt = getopt(argc, argv, "hn:t:d:c")) != -1)
+    {
+        switch(opt)
+        {
+        case 'n':
+            try
+            {
+                sideLength = static_cast<IdxType>(std::stoull(optarg, nullptr, 0));
+            }
+            catch(std::invalid_argument const& e)
+            {
+                std::cerr << "Error: invalid argument '" << optarg << "'.\n";
+                return EXIT_FAILURE;
+            }
+            catch(std::out_of_range const& e)
+            {
+                std::cerr << "Error: value '" << optarg << "' out of range for unsigned long long.\n";
+                return EXIT_FAILURE;
+            }
+            break;
+        case 't':
+            try
+            {
+                numTimeSteps = static_cast<IdxType>(std::stoull(optarg, nullptr, 0));
+            }
+            catch(std::invalid_argument const& e)
+            {
+                std::cerr << "Error: invalid argument '" << optarg << "'.\n";
+                return EXIT_FAILURE;
+            }
+            catch(std::out_of_range const& e)
+            {
+                std::cerr << "Error: value '" << optarg << "' out of range for unsigned long long.\n";
+                return EXIT_FAILURE;
+            }
+            break;
+        case 'd':
+            try
+            {
+                tMax = std::stod(optarg, nullptr);
+            }
+            catch(std::invalid_argument const& e)
+            {
+                std::cerr << "Error: invalid argument '" << optarg << "'.\n";
+                return EXIT_FAILURE;
+            }
+            catch(std::out_of_range const& e)
+            {
+                std::cerr << "Error: value '" << optarg << "' out of range for unsigned long long.\n";
+                return EXIT_FAILURE;
+            }
+            break;
+        case 'h':
+            help(argv);
+            exit(EXIT_SUCCESS);
+        case 'c':
+            enableCheck = false;
+            break;
+        default:
+            help(argv);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    printExampleHeader(sideLength, numTimeSteps, enableCheck, tMax);
+
+    return onHost::executeForEachIfHasDevice(
+        [=, &poolObj](auto const& backend)
+        {
+            return example(
+                poolObj.getContext(),
+                backend[object::deviceSpec],
+                backend[object::exec],
+                sideLength,
+                numTimeSteps,
+                tMax,
+                enableCheck);
+        },
+        onHost::allBackends(onHost::enabledApis, onHost::example::enabledExecutors));
 }
