@@ -16,14 +16,12 @@ namespace rg
     struct TaskData
     {
         // TODO deal with type erasure, need to call promise
+        // if handle is null, then it has been removed
         std::coroutine_handle<> handle; // Coroutine handle
         std::atomic<TWaitCount>* waitCounter_p{};
         ThreadPool* pool_ptr{nullptr};
         // uninitialized for a default constructed
         AccessMode accessMode{AccessMode::Uninitialized};
-        // remove state 0 - default
-        // remove state 1 - removed
-        bool remove_state = 0;
 
         // TODO try passing T as parameter and then constructing
         template<typename TAccess>
@@ -56,13 +54,14 @@ namespace rg
     struct ResourceTaskQueue
     {
     private:
+        static constexpr uint32_t queueCapacity = 1024;
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> first = 0; // Iterator to the first task
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> firstNotReady
             = 0; // Iterator to the first not-ready task
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> last
             = 0; // Iterator to one past the last task
         // TODO replace with deque for stable iterators
-        std::array<TaskData, 1024> tasks{};
+        std::array<TaskData, queueCapacity> tasks{};
 
     public:
         // Add a task to the list, incremenets wait counter of task if task is not immidiately ready to run
@@ -127,7 +126,7 @@ namespace rg
 
                 // TODO is this while loop enforcing things correctly? I want the check for the remove state and
                 // termination at fnr before the compare exchange is tried
-                while((found_completed_task_exit = (tasks[cur].remove_state == 1))
+                while((found_completed_task_exit = (tasks[cur].handle == nullptr))
                       && cur != firstNotReady.load(std::memory_order_acquire))
                 {
                     // TODO is it possible to move this into while loop?
@@ -163,7 +162,7 @@ namespace rg
                         // delete the node
                         // publish as removed (Here publish state before checking first. While actually deleting we
                         // initially move and publish first and then check state)
-                        tasks[cur].remove_state = 1;
+                        tasks[cur].handle = nullptr;
 
                         if(first.compare_exchange_strong(
                                cur,
@@ -177,7 +176,7 @@ namespace rg
 
                             // cant use loaded fnr as we more ready tasks might be added and finished as we are
                             // removing stuff
-                            while((found_completed_task_exit = (tasks[cur].remove_state == 1))
+                            while((found_completed_task_exit = (tasks[cur].handle == nullptr))
                                   && cur != firstNotReady.load(std::memory_order_acquire))
                             {
                                 // TODO is it possible to move this into while loop?
