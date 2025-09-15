@@ -132,6 +132,36 @@ namespace rg
             return std::move(resNode->resource);
         }
 
+        T& operator*() &
+        {
+            return resNode->resource;
+        }
+
+        T const& operator*() const&
+        {
+            return resNode->resource;
+        }
+
+        T&& operator*() &&
+        {
+            return std::move(resNode->resource);
+        }
+
+        T const&& operator*() const&&
+        {
+            return std::move(resNode->resource);
+        }
+
+        T* operator->()
+        {
+            return std::addressof(resNode->resource);
+        }
+
+        T const* operator->() const
+        {
+            return std::addressof(resNode->resource);
+        }
+
         bool unique() const
         {
             return resNode.unique();
