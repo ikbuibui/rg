@@ -25,7 +25,7 @@ namespace rg
     };
 
     template<typename T, DeleteEvent DelEvent = DeleteEvent::Default>
-    struct task_promise
+    struct TaskPromise
     {
         using return_type = T;
 
@@ -66,10 +66,10 @@ namespace rg
         // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly
         // dangle
         template<typename... Args>
-        task_promise(Context& ctx, Args&...)
+        TaskPromise(Context& ctx, Args&...)
             : pool_p{ctx.poolPtr}
             , parent{ctx.handleRef}
-            , self{SharedCoroutineHandle(std::coroutine_handle<task_promise>::from_promise(*this), sharedOwnerCounter)}
+            , self{SharedCoroutineHandle(std::coroutine_handle<TaskPromise>::from_promise(*this), sharedOwnerCounter)}
         {
             ctx.handleRef = std::ref(self);
         }
@@ -77,13 +77,13 @@ namespace rg
         // workaround for lamdas which pass their implicit this parameter
         // not needed if we have C++23 static lambdas
         template<typename... Args>
-        task_promise(auto&, Context& ctx, Args&... args) : task_promise(ctx, args...)
+        TaskPromise(auto&, Context& ctx, Args&... args) : TaskPromise(ctx, args...)
         {
         }
 
-        Task<T, task_promise> get_return_object()
+        Task<T, TaskPromise> get_return_object()
         {
-            return Task<T, task_promise>{self};
+            return Task<T, TaskPromise>{self};
         }
 
         // required to suspend as handle coroutine is created in dispactch task
@@ -141,7 +141,7 @@ namespace rg
     };
 
     template<DeleteEvent DelEvent>
-    struct task_promise<void, DelEvent>
+    struct TaskPromise<void, DelEvent>
     {
         using return_type = void;
 
@@ -181,10 +181,10 @@ namespace rg
         // if a reference is passed, it a reference is copied to the coroutine state, and it can possibly
         // dangle
         template<typename... Args>
-        task_promise(Context& ctx, Args&...)
+        TaskPromise(Context& ctx, Args&...)
             : pool_p{ctx.poolPtr}
             , parent{ctx.handleRef}
-            , self{SharedCoroutineHandle(std::coroutine_handle<task_promise>::from_promise(*this), sharedOwnerCounter)}
+            , self{SharedCoroutineHandle(std::coroutine_handle<TaskPromise>::from_promise(*this), sharedOwnerCounter)}
         {
             ctx.handleRef = std::ref(self);
         }
@@ -192,13 +192,13 @@ namespace rg
         // workaround for lamdas which pass their implicit this parameter
         // not needed if we have C++23 static lambdas
         template<typename... Args>
-        task_promise(auto&, Context& ctx, Args&... args) : task_promise(ctx, args...)
+        TaskPromise(auto&, Context& ctx, Args&... args) : TaskPromise(ctx, args...)
         {
         }
 
-        Task<void, task_promise> get_return_object()
+        Task<void, TaskPromise> get_return_object()
         {
-            return Task<void, task_promise>{self};
+            return Task<void, TaskPromise>{self};
         }
 
         // required to suspend as handle coroutine is created in dispactch task
@@ -249,4 +249,12 @@ namespace rg
             rg::CoroAllocator::deallocate({ptr, n});
         }
     };
+
+    template<typename T>
+    using DefaultPromise = TaskPromise<T, DeleteEvent::Default>;
+
+    template<typename T>
+    using AlpakaPromise = TaskPromise<T, DeleteEvent::Default>;
+
+
 } // namespace rg

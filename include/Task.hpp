@@ -8,7 +8,6 @@
 #include "ThreadPool.hpp"
 
 #include <atomic>
-#include <coroutine>
 #include <functional>
 #include <type_traits>
 #include <utility>
@@ -25,7 +24,7 @@ namespace rg
     // handle stack will be eaten by the pool
     // TODO can i hold T as non optional, maybe if it is default constructible
     // [[nodiscard("The handle is required to get() the return value of the task")]]
-    template<typename T, typename TPromise = task_promise<T, DeleteEvent::Default>>
+    template<typename T, typename TPromise = DefaultPromise<T>>
     struct Task
     {
         template<typename U>
