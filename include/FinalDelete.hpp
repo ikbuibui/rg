@@ -9,7 +9,7 @@ namespace rg
     struct FinalDelete
     {
         SharedCoroutineHandle self;
-        std::coroutine_handle<> handle = std::noop_coroutine();
+        std::coroutine_handle<> continuationHandle = std::noop_coroutine();
 
         constexpr bool await_ready() const noexcept
         {
@@ -22,9 +22,9 @@ namespace rg
             // Can i do transfer here? if the task is going to be deleted, and the when removed from resources and it
             // makes another task ready for resources, can i start executing this task? but it may make multiple tasks
             // ready. Maybe return one task
-            auto local_handle_copy = handle;
+            auto localHandleCopy = continuationHandle;
             self.reset();
-            return local_handle_copy;
+            return localHandleCopy;
         }
 
         constexpr void await_resume() const noexcept

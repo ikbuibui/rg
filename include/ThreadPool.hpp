@@ -172,7 +172,7 @@ namespace rg
                 h = thread_queues[index]->pop();
                 if(h)
                 {
-                    h.value().resume();
+                    h->resume();
                     continue;
                 }
 
