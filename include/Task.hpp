@@ -17,7 +17,13 @@
 
 namespace rg
 {
-    template<typename T>
+    enum class DeleteEvent
+    {
+        Default,
+        AlpakaEvent
+    };
+
+    template<typename T, DeleteEvent DelEvent>
     struct task_promise;
 
     template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
@@ -29,7 +35,7 @@ namespace rg
     // handle stack will be eaten by the pool
     // TODO can i hold T as non optional, maybe if it is default constructible
     // [[nodiscard("The handle is required to get() the return value of the task")]]
-    template<typename T>
+    template<typename T, typename TPromise = task_promise<T, DeleteEvent::Default>>
     struct Task
     {
         template<typename U>
@@ -44,7 +50,7 @@ namespace rg
         template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
         friend auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args);
 
-        using promise_type = task_promise<T>;
+        using promise_type = TPromise;
 
         explicit Task(SharedCoroutineHandle const& h) noexcept : coro(h)
         {
@@ -94,7 +100,7 @@ namespace rg
         bool isMoved = false;
     };
 
-    template<typename T>
+    template<typename T, DeleteEvent DelEvent = DeleteEvent::Default>
     struct task_promise
     {
         using return_type = T;
@@ -151,9 +157,9 @@ namespace rg
         {
         }
 
-        Task<T> get_return_object()
+        Task<T, task_promise> get_return_object()
         {
-            return Task<T>{self};
+            return Task<T, task_promise>{self};
         }
 
         // required to suspend as handle coroutine is created in dispactch task
@@ -210,8 +216,8 @@ namespace rg
         }
     };
 
-    template<>
-    struct task_promise<void>
+    template<DeleteEvent DelEvent>
+    struct task_promise<void, DelEvent>
     {
         using return_type = void;
 
@@ -266,9 +272,9 @@ namespace rg
         {
         }
 
-        Task<void> get_return_object()
+        Task<void, task_promise> get_return_object()
         {
-            return Task<void>{self};
+            return Task<void, task_promise>{self};
         }
 
         // required to suspend as handle coroutine is created in dispactch task
