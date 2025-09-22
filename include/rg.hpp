@@ -6,4 +6,5 @@
 #include "Resource.hpp"
 #include "Task.hpp"
 #include "ThreadPool.hpp"
+#include "dispatch.hpp"
 #include "init.hpp"
