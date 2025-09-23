@@ -1,7 +1,6 @@
 #include "Context.hpp"
 #include "DispatchAwaiter.hpp"
 #include "ResourceAccess.hpp"
-#include "Task.hpp"
 #include "ThreadPool.hpp"
 
 #include <atomic>
@@ -22,9 +21,8 @@ namespace rg
         }
     };
 
-    // TODO add requires ReturnsTask<Callable, Args...>
-    template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
-    auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args)
+    template<typename Callable, typename... Args>
+    auto invoke_register(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args)
     {
         ctx.poolPtr = pool_p;
         auto handle = std::invoke(std::forward<Callable>(task), std::move(ctx), transform_resource(args)...);
@@ -56,6 +54,14 @@ namespace rg
                  }
              }(args)));
 
+        return std::move(handle);
+    }
+
+    // TODO add requires ReturnsTask<Callable, Args...>
+    template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
+    auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args)
+    {
+        auto handle = invoke_register(pool_p, ctx, std::forward<Callable>(task), std::forward<Args>(args)...);
         return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle)};
     }
 

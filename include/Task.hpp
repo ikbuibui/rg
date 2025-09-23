@@ -12,9 +12,6 @@
 namespace rg
 {
 
-    template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>
-    auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args);
-
     // parser coroutine return type
     // returns the value of the callable
     // I want to suspend_always initial_suspend it and then put its handle to the handle stack
@@ -33,8 +30,8 @@ namespace rg
         template<typename... TArgs>
         friend struct BarrierAwaiter;
 
-        template<bool synchronous, bool finishedOnReturn, typename Callable, typename... Args>
-        friend auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args);
+        template<typename Callable, typename... Args>
+        friend auto invoke_register(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args);
 
         using promise_type = TPromise;
 
