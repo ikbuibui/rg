@@ -58,7 +58,7 @@ rg::Task<void> loop_skynet(rg::Context ctx)
     for(size_t j = 0; j < iter_count; ++j)
     {
         co_await rg::dispatch_task(ctx, skynet<Depth>);
-        co_await rg::barrier();
+        co_await rg::barrier(ctx);
     }
 
     auto endTime = std::chrono::high_resolution_clock::now();
@@ -70,7 +70,7 @@ rg::Task<void> loop_skynet(rg::Context ctx)
 auto main_wrapper(rg::Context ctx) -> rg::InitTask<int>
 {
     co_await rg::dispatch_task(ctx, skynet<8>); // warmup
-    co_await rg::barrier();
+    co_await rg::barrier(ctx);
     co_await rg::dispatch_task(ctx, loop_skynet<8>);
     co_return 0;
 }

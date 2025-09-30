@@ -22,7 +22,7 @@ inline auto fib(rg::Context ctx, size_t n) -> rg::Task<size_t>
 auto main_wrapper(rg::Context ctx, size_t n) -> rg::InitTask<int>
 {
     co_await rg::dispatch_task(ctx, fib, 30);
-    co_await rg::barrier();
+    co_await rg::barrier(ctx);
     std::printf("results:\n");
     auto startTime = std::chrono::high_resolution_clock::now();
 

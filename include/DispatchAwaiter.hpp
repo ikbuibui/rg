@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ThreadPool.hpp"
 #include "waitCounter.hpp"
 
 #include <atomic>
@@ -28,7 +29,7 @@ namespace rg
     {
         T handle;
 
-        DispatchAwaiter(T&& handleObj) : handle{std::move(handleObj)}
+        DispatchAwaiter(T&& handleObj, ThreadPool*) : handle{std::move(handleObj)}
         {
         }
 
@@ -92,8 +93,9 @@ namespace rg
     {
         // takes ownership of the handle, and passes it on in await resume
         T handle;
+        ThreadPool* poolPtr;
 
-        DispatchAwaiter(T&& handleObj) : handle{std::move(handleObj)}
+        DispatchAwaiter(T&& handleObj, ThreadPool* pool) : handle{std::move(handleObj)}, poolPtr{pool}
         {
         }
 
@@ -118,12 +120,11 @@ namespace rg
             // save here, as after dispatching continuation to the threadpool, this awaiter object (holding handle) may
             // be destroyed, then the return statement would be use after free
             auto const resume_ready_handle = handle.coro.get_coroutine_handle();
-            auto const pool_p = h.promise().pool_p;
             // suspend only called when resources are ready
             // assert(resourcesReady);
             // emplace continuation to stack
             // TODO make sure the promise of the continuation can access the return type of
-            pool_p->addTask(h);
+            poolPtr->addTask(h);
 
             // execute the coroutine
             // USING THIS is dangerous cont may be finished and destroy this awitable object

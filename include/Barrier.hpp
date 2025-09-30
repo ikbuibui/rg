@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Context.hpp"
 #include "Resource.hpp"
 #include "Task.hpp"
 #include "ThreadPool.hpp"
@@ -25,12 +26,14 @@ namespace rg
         // using ArgTuple = std::tuple<std::remove_cvref_t<TArgs>...>;
         using ArgTuple = std::tuple<std::reference_wrapper<std::remove_cvref_t<TArgs>>...>;
         ArgTuple resArgs;
+        ThreadPool* pool_ptr;
 
         // BarrierAwaiter(TArgs... res) : resArgs(std::move(res)...)
         // {
         // }
-        BarrierAwaiter(TArgs&... args) requires((IsResource<TArgs> && ...))
+        BarrierAwaiter(ThreadPool* poolPtr, TArgs&... args) requires((IsResource<TArgs> && ...))
             : resArgs(std::ref(args)...)
+            , pool_ptr(poolPtr)
         {
         }
 
@@ -45,7 +48,7 @@ namespace rg
         std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> h) noexcept
         {
             auto& cont_promise = h.promise();
-            auto ctx = Context(cont_promise.self, cont_promise.pool_p);
+            auto ctx = Context(cont_promise.self, pool_ptr);
             // save here, as after dispatching continuation to the threadpool, this awaiter object (holding handle) may
             // be destroyed, then the return statement would be use after free
             auto handle = std::apply(
@@ -91,10 +94,10 @@ namespace rg
     };
 
     // Doesnt accept rvalues as they will dangle as barrier only stores references
-    auto barrier(IsResource auto&... resArgs)
+    auto barrier(Context& ctx, IsResource auto&... resArgs)
     {
         // the task adds dependency on resources, a seperate block on
-        return BarrierAwaiter(resArgs...);
+        return BarrierAwaiter(ctx.poolPtr, resArgs...);
     }
 
 } // namespace rg

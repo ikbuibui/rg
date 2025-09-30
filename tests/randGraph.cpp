@@ -215,7 +215,7 @@ auto test(rg::Context ctx) -> rg::InitTask<int>
     //     },
     //     ptr);
 
-    co_await rg::barrier();
+    co_await rg::barrier(ctx);
 
     std::cout << "starting check" << std::endl;
 

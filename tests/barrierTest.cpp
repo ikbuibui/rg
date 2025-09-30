@@ -27,7 +27,7 @@ auto barrier_test_logic(rg::Context ctx) -> rg::InitTask<int>
         resource1.rg_write());
 
     std::cout << "before barrier" << std::endl;
-    co_await rg::barrier(resource1);
+    co_await rg::barrier(ctx, resource1);
     std::cout << "after barrier" << std::endl;
     std::cout << "output value " << co_await handle.get() << std::endl;
     co_await rg::dispatch_task(

@@ -39,10 +39,6 @@ namespace rg
             std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState{1};
 
-        // TODO think should I hold this in task
-        // initialized in await_transform of parent coroutine
-        ThreadPool* pool_p{};
-
         // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
         // someone else waits for the completion of this task.
         std::coroutine_handle<> continuationHandle{nullptr};
@@ -67,8 +63,7 @@ namespace rg
         // dangle
         template<typename... Args>
         TaskPromise(Context& ctx, Args&...)
-            : pool_p{ctx.poolPtr}
-            , parent{ctx.handleRef}
+            : parent{ctx.handleRef}
             , self{SharedCoroutineHandle(std::coroutine_handle<TaskPromise>::from_promise(*this), sharedOwnerCounter)}
         {
             ctx.handleRef = std::ref(self);
@@ -155,9 +150,6 @@ namespace rg
             std::atomic<SharedCoroutineHandle::TRefCount> sharedOwnerCounter{1u};
         alignas(hardware_destructive_interference_size) std::atomic<uint32_t> workingState{1};
 
-        // TODO think should I hold this in task
-        // initialized in await_transform of parent coroutine
-        ThreadPool* pool_p{};
 
         // if .get is called and this coro is not done, add waiter handle here to notify on final suspend
         // someone else waits for the completion of this task.
@@ -182,8 +174,7 @@ namespace rg
         // dangle
         template<typename... Args>
         TaskPromise(Context& ctx, Args&...)
-            : pool_p{ctx.poolPtr}
-            , parent{ctx.handleRef}
+            : parent{ctx.handleRef}
             , self{SharedCoroutineHandle(std::coroutine_handle<TaskPromise>::from_promise(*this), sharedOwnerCounter)}
         {
             ctx.handleRef = std::ref(self);

@@ -62,7 +62,7 @@ namespace rg
     auto dispatch_task(ThreadPool* pool_p, Context ctx, Callable&& task, Args&&... args)
     {
         auto handle = invoke_register(pool_p, ctx, std::forward<Callable>(task), std::forward<Args>(args)...);
-        return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle)};
+        return DispatchAwaiter<decltype(handle), synchronous, finishedOnReturn>{std::move(handle), ctx.poolPtr};
     }
 
     template<bool synchronous = false, bool finishedOnReturn = false, typename Callable, typename... Args>

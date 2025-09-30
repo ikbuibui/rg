@@ -73,7 +73,7 @@ auto main_wrapper(rg::Context ctx) -> rg::InitTask<int>
         // warmup
         auto result = co_await dispatch_task(ctx, nqueens<nqueens_work>, 0, buf);
         check_answer(co_await result.get());
-        co_await rg::barrier();
+        co_await rg::barrier(ctx);
     }
 
     auto startTime = std::chrono::high_resolution_clock::now();
