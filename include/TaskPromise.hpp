@@ -3,9 +3,8 @@
 #include "Context.hpp"
 #include "CoroAllocator.hpp"
 #include "FinalDelete.hpp"
-#include "ResourceTaskQueue.hpp"
+#include "Registration.hpp"
 #include "SharedCoroutineHandle.hpp"
-#include "ThreadPool.hpp"
 
 #include <atomic>
 #include <coroutine>
@@ -49,8 +48,7 @@ namespace rg
         // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
         SharedCoroutineHandle self;
 
-        // requires stable pointer access to taskData
-        std::vector<std::pair<ResourceTaskQueue*, TaskData*>> resourceUsage;
+        Registration registration;
 
         T result;
         // true as the return object is always created
@@ -93,10 +91,8 @@ namespace rg
             // let go of parent
             parent.reset();
             // Deregister from resource queue
-            for(auto& resUsage : resourceUsage)
-            {
-                resUsage.first->remove_task(resUsage.second);
-            }
+            registration.deregister();
+
             uint32_t expectedState = 1;
             workingState.compare_exchange_strong(expectedState, 0);
             // contHandle has been pushed already
@@ -161,8 +157,7 @@ namespace rg
         // hold self and reset in final suspend, helps to keep me alive even if returnObj is dead
         SharedCoroutineHandle self;
 
-        // requires stable pointer access to taskData
-        std::vector<std::pair<ResourceTaskQueue*, TaskData*>> resourceUsage;
+        Registration registration;
 
         // true as the return object is always created
         bool coroOutsideTask = true;
@@ -204,10 +199,8 @@ namespace rg
             // let go of parent
             parent.reset();
             // Deregister from resource queue
-            for(auto& resUsage : resourceUsage)
-            {
-                resUsage.first->remove_task(resUsage.second);
-            }
+            registration.deregister();
+
             uint32_t expectedState = 1;
             workingState.compare_exchange_strong(expectedState, 0);
             // contHandle has been pushed already

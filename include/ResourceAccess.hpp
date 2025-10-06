@@ -60,6 +60,10 @@ namespace rg
 
     struct TaskData;
 
+    // This is the type which we get back from .read() . write() on a resource
+    // This is the type which the user is provided with inside a task
+    // The user doesnt need to know the access mode. The access mode is not needed inside the task. Only for
+    // registration
     template<typename TResource>
     class ResourceAccess
     {

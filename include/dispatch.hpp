@@ -1,5 +1,6 @@
 #include "Context.hpp"
 #include "DispatchAwaiter.hpp"
+#include "Registration.hpp"
 #include "ResourceAccess.hpp"
 #include "ThreadPool.hpp"
 
@@ -33,26 +34,11 @@ namespace rg
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
         auto& waitCounter = handlePromise.waitCounter;
         waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
-        auto& resourceUsage = handlePromise.resourceUsage;
-        resourceUsage.reserve(resource_counter);
 
-        // Register task to resources
-        // Fold expression only for handles satisfying HasAccessType
-        (...,
-         (
-             [&](auto& arg)
-             {
-                 if constexpr(IsResourceAccess<decltype(arg)>)
-                 {
-                     resourceUsage.emplace_back(
-                         &arg.resource.getResNode().userQueue,
-                         arg.resource.getResNode().userQueue.add_task(
-                             {handle.coro.template get_coroutine_handle<typename decltype(handle)::promise_type>(),
-                              arg.getAccessMode(),
-                              &waitCounter,
-                              ctx.poolPtr}));
-                 }
-             }(args)));
+        auto rawCoroHandle = handle.coro.template get_coroutine_handle<typename decltype(handle)::promise_type>();
+
+        handlePromise.registration
+            = Registration{resource_counter, rawCoroHandle, waitCounter, ctx.poolPtr, std::forward<Args>(args)...};
 
         return std::move(handle);
     }
