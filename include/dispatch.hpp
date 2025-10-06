@@ -31,11 +31,11 @@ namespace rg
         // if it is a transform resource, call transform on it
         constexpr uint16_t resource_counter = (static_cast<uint16_t>(IsResourceAccess<Args>) + ... + 0);
         auto& handlePromise = handle.coro.template promise<typename decltype(handle)::promise_type>();
-        auto& resourceUsage = handlePromise.resourceUsage;
         auto& waitCounter = handlePromise.waitCounter;
-
-        resourceUsage.reserve(resource_counter);
         waitCounter.fetch_add(resource_counter, std::memory_order_relaxed);
+        auto& resourceUsage = handlePromise.resourceUsage;
+        resourceUsage.reserve(resource_counter);
+
         // Register task to resources
         // Fold expression only for handles satisfying HasAccessType
         (...,
