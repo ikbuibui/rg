@@ -35,7 +35,7 @@ namespace rg
     private:
         // bitfield where 0 is free and 1 is busy
         // std::atomic<uint64_t> worker_states{0};
-        thread_local static inline stack_type* thread_queue_p;
+        thread_local static inline stack_type* thread_queue_p{nullptr};
         std::vector<std::unique_ptr<stack_type>> thread_queues;
         stack_type master_queue{threadPoolStackSize};
         BarrierQueue barrier_queue{};
@@ -99,7 +99,15 @@ namespace rg
 
         void addTask(std::coroutine_handle<> h)
         {
-            thread_queue_p->emplace(h);
+            // check required if a thread from some other pool reaches here
+            if(thread_queue_p != nullptr)
+            {
+                thread_queue_p->emplace(h);
+            }
+            else
+            {
+                master_queue.emplace(h);
+            }
         }
 
         // returns the return of the callable of the coroutine
@@ -169,7 +177,7 @@ namespace rg
                 //     h.resume();
                 //     continue;
                 // }
-                h = thread_queues[index]->pop();
+                h = thread_queue_p->pop();
                 if(h)
                 {
                     h->resume();
